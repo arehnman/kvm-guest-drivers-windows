@@ -661,11 +661,19 @@ NTSTATUS VioGpuAdapter::Escape(_In_ CONST DXGKARG_ESCAPE *pEscape)
                     return STATUS_INVALID_PARAMETER_2;
                 };
 
-                PGPU_VBUFFER vbuf;
-                ctrlQueue.AskCapset(&vbuf,
-                                    pVioGpuEscape->Capset.CapsetId,
-                                    pCapsetInfo->max_size,
-                                    pVioGpuEscape->Capset.Version);
+                PGPU_VBUFFER vbuf = 0;
+
+                /* ARE 2025-08-30 Spice server v0.16.0 does not return Capset if the display is not visible */
+
+                status = ctrlQueue.AskCapset(&vbuf,
+                                             pVioGpuEscape->Capset.CapsetId,
+                                             pCapsetInfo->max_size,
+                                             pVioGpuEscape->Capset.Version);
+                if (!status) 
+                {
+                    return STATUS_INTERNAL_ERROR;
+                }
+
                 UCHAR *buf = ((PGPU_RESP_CAPSET)vbuf->resp_buf)->capset_data;
                 ULONG to_copy = min(pVioGpuEscape->Capset.Size, pCapsetInfo->max_size);
                 __try
@@ -1336,7 +1344,14 @@ NTSTATUS VioGpuAdapter::HWInit(PCM_RESOURCE_LIST pResList)
         {
             PGPU_VBUFFER vbuf = NULL;
 
-            ctrlQueue.AskCapsetInfo(&vbuf, i);
+            /* ARE 2025-08-30 Spice server v0.16.0 does not return CapsetInfo if the display is not visible */
+
+            if (!ctrlQueue.AskCapsetInfo(&vbuf, i))
+            {
+                DbgPrint(TRACE_LEVEL_FATAL, ("%s AskCapsetInfo failed\n", __FUNCTION__));
+                return STATUS_INTERNAL_ERROR;
+            }
+
             PGPU_RESP_CAPSET_INFO resp = (PGPU_RESP_CAPSET_INFO)vbuf->resp_buf;
             ULONG capset_id = resp->capset_id;
             if (capset_id > 63 || capset_id <= 0)
