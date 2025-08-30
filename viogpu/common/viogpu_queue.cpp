@@ -925,7 +925,15 @@ void VioGpuBuf::Close(void)
         {
             PGPU_VBUFFER pvbuf = CONTAINING_RECORD(pListItem, GPU_VBUFFER, list_entry);
             ASSERT(pvbuf);
-            ASSERT(pvbuf->resp_size <= MAX_INLINE_RESP_SIZE);
+
+            if (pvbuf->resp_size > MAX_INLINE_RESP_SIZE)
+            {
+                delete[] reinterpret_cast<PBYTE>(pvbuf->resp_buf);
+                pvbuf->resp_buf = NULL;
+                pvbuf->resp_size = 0;
+            }
+
+            ASSERT(pvbuf->data_buf == NULL && pvbuf->data_size == 0);
 
             delete[] reinterpret_cast<PBYTE>(pvbuf);
             --m_uCount;
@@ -1000,7 +1008,7 @@ PGPU_VBUFFER VioGpuBuf::GetBuf(_In_ int size, _In_ int resp_size, _In_opt_ void 
 
     ASSERT(pbuf);
     memset(pbuf, 0, VBUFFER_SIZE);
-    ASSERT(size > MAX_INLINE_CMD_SIZE);
+    ASSERT(size <= MAX_INLINE_CMD_SIZE);
 
     pbuf->buf = (char *)((ULONG_PTR)pbuf + sizeof(*pbuf));
     pbuf->size = size;
@@ -1009,6 +1017,7 @@ PGPU_VBUFFER VioGpuBuf::GetBuf(_In_ int size, _In_ int resp_size, _In_opt_ void 
     pbuf->resp_size = resp_size;
     if (resp_size <= MAX_INLINE_RESP_SIZE)
     {
+        ASSERT(resp_buf == NULL);
         pbuf->resp_buf = (char *)((ULONG_PTR)pbuf->buf + size);
     }
     else
