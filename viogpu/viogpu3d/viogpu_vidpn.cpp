@@ -552,8 +552,6 @@ NTSTATUS VioGpuVidPN::GetModeList(DXGK_DISPLAY_INFORMATION *pDispInfo)
     m_ModeInfo = NULL;
     m_ModeNumbers = NULL;
 
-    VioGpuDbgBreak();
-
     ModeCount = ProcessEdid();
 
     ModeCount++;
@@ -584,7 +582,6 @@ NTSTATUS VioGpuVidPN::GetModeList(DXGK_DISPLAY_INFORMATION *pDispInfo)
     pDispInfo->ColorFormat = D3DDDIFMT_X8R8G8B8;
     pDispInfo->Pitch = (BPPFromPixelFormat(pDispInfo->ColorFormat) / BITS_PER_BYTE) * pDispInfo->Width;
 
-    VioGpuDbgBreak();
 
     for (USHORT indx = 0; indx < ModeCount - 1; indx++)
     {
@@ -612,7 +609,6 @@ NTSTATUS VioGpuVidPN::GetModeList(DXGK_DISPLAY_INFORMATION *pDispInfo)
         }
     }
 
-    VioGpuDbgBreak();
     m_CustomModeIndex = (USHORT)(ModeCount - 1);
 
     m_ModeNumbers[m_CustomModeIndex] = m_CustomModeIndex;
@@ -1774,7 +1770,7 @@ int VioGpuVidPN::AddEdidModes(void)
     ESTABLISHED_TIMINGS_1_2 est_timing_1_2 = edid_data->EstablishedTimings;
     MANUFACTURER_TIMINGS manufact_timing = edid_data->ManufacturerTimings;
     int modecount = 0;
-    VioGpuDbgBreak();
+
     UpdateModes(MIN_WIDTH_SIZE, MIN_HEIGHT_SIZE, modecount);
     UpdateModes(NOM_WIDTH_SIZE, NOM_HEIGHT_SIZE, modecount);
     if (est_timing_1_2.Timing_800x600_60 || est_timing_1_2.Timing_800x600_56 || est_timing_1_2.Timing_800x600_75 ||
