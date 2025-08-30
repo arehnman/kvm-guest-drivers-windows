@@ -1990,7 +1990,7 @@ void VioGpuVidPN::FlipThread(void *ctx)
 
     VioGpuVidPN *vidpn = reinterpret_cast<VioGpuVidPN *>(ctx);
     LARGE_INTEGER interval;
-    interval.QuadPart = 166666LL;
+    interval.QuadPart = -166666LL;
     while (true)
     {
         KeDelayExecutionThread(KernelMode, false, &interval);
