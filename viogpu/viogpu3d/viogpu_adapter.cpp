@@ -235,6 +235,8 @@ NTSTATUS VioGpuAdapter::StopDevice(VOID)
     PAGED_CODE();
     commander.Stop();
 
+    virtio_device_reset(&m_VioDev);
+
     m_Flags.DriverStarted = FALSE;
     return STATUS_SUCCESS;
 }
