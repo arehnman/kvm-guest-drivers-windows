@@ -1430,6 +1430,8 @@ NTSTATUS VioGpuAdapter::HWClose(void)
     m_bStopWorkThread = TRUE;
     KeSetEvent(&m_ConfigUpdateEvent, IO_NO_INCREMENT, FALSE);
 
+    if (m_pWorkThread)
+    {
     if (KeWaitForSingleObject(m_pWorkThread, Executive, KernelMode, FALSE, &timeout) == STATUS_TIMEOUT)
     {
         DbgPrint(TRACE_LEVEL_FATAL, ("---> Failed to exit the worker thread\n"));
@@ -1437,6 +1439,7 @@ NTSTATUS VioGpuAdapter::HWClose(void)
     }
 
     ObDereferenceObject(m_pWorkThread);
+    }
 
     frameSegment.Close();
 
