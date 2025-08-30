@@ -159,7 +159,7 @@ void VioGpuVidPN::ReleasePostDisplayOwnership(D3DDDI_VIDEO_PRESENT_TARGET_ID Tar
     DestroyFrameBufferObj(TRUE);
 
     DbgPrint(TRACE_LEVEL_FATAL,
-             ("StopDeviceAndReleasePostDisplayOwnership Width = %d Height = %d Pitch = %d ColorFormat = %dn",
+             ("StopDeviceAndReleasePostDisplayOwnership Width = %d Height = %d Pitch = %d ColorFormat = %d\n",
               m_SystemDisplayInfo.Width,
               m_SystemDisplayInfo.Height,
               m_SystemDisplayInfo.Pitch,
