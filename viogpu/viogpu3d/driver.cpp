@@ -574,6 +574,7 @@ VioGpu3DPatch(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_PATCH *pPatch)
 {
     PAGED_CODE();
     VIOGPU_ASSERT_CHK(hAdapter != NULL);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     VioGpuAdapter *pAdapter = reinterpret_cast<VioGpuAdapter *>(hAdapter);
     if (!pAdapter->IsDriverActive())
@@ -588,8 +589,7 @@ APIENTRY
 VioGpu3DSubmitCommand(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_SUBMITCOMMAND *pSubmitCommand)
 {
     VIOGPU_ASSERT_CHK(hAdapter != NULL);
-    // DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
-    // DbgPrint(TRACE_LEVEL_ERROR, ("Fake imp %s\n", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
     VioGpuAdapter *pAdapter = reinterpret_cast<VioGpuAdapter *>(hAdapter);
     if (!pAdapter->IsDriverActive())
