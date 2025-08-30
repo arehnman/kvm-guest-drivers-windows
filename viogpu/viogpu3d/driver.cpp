@@ -584,6 +584,9 @@ VioGpu3DPatch(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_PATCH *pPatch)
     return pAdapter->commander.Patch(pPatch);
 };
 
+#pragma code_seg(push)
+#pragma code_seg()
+
 NTSTATUS
 APIENTRY
 VioGpu3DSubmitCommand(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_SUBMITCOMMAND *pSubmitCommand)
@@ -600,6 +603,8 @@ VioGpu3DSubmitCommand(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_SUBMITCOMMA
     }
     return pAdapter->commander.SubmitCommand(pSubmitCommand);
 };
+
+#pragma code_seg(pop)
 
 NTSTATUS
 APIENTRY
