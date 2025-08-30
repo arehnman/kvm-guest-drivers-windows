@@ -1626,7 +1626,12 @@ VOID VioGpuVidPN::BlackOutScreen(CURRENT_MODE *pCurrentMod)
 
         resid = m_pFrameBuf->GetId();
 
-        // ctrlQueue.TransferToHost2D(resid, 0UL, pCurrentMod->DispInfo.Width, pCurrentMod->DispInfo.Height, 0, 0);
+        m_pAdapter->ctrlQueue.SetScanout(0,
+                                         resid,
+                                         pCurrentMod->DispInfo.Width,
+                                         pCurrentMod->DispInfo.Height,
+                                         0,
+                                         0);
         m_pAdapter->ctrlQueue.ResFlush(resid, pCurrentMod->DispInfo.Width, pCurrentMod->DispInfo.Height, 0, 0);
     }
 
