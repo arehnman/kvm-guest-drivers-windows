@@ -497,6 +497,9 @@ NTSTATUS VioGpuAdapter::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO *pQ
 
                 pDriverCaps->MaxQueuedFlipOnVSync = 1;
 
+                /* FlipIndependent required on WDDM 1.3 */
+                pDriverCaps->FlipCaps.FlipIndependent = 1;
+
                 pDriverCaps->MemoryManagementCaps.SectionBackedPrimary = TRUE;
 
                 pDriverCaps->SupportDirectFlip = 1;
