@@ -490,6 +490,9 @@ VioGpu3DDestroyAllocation(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_DESTROY
         VioGpuAllocation *allocation = reinterpret_cast<VioGpuAllocation *>(pDestroyAllocation->pAllocationList[i]);
         if (allocation != NULL)
         {
+            VIOGPU_RES_BUSY_REQ resBusy;
+            resBusy.Wait = 1;
+            allocation->EscapeResourceBusy(&resBusy);
             delete allocation;
         }
     }

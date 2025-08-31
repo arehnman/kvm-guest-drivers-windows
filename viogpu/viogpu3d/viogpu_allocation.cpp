@@ -30,6 +30,9 @@ VioGpuAllocation::VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_RESOURCE_OPTIO
 VioGpuAllocation::~VioGpuAllocation(void)
 {
     DbgPrint(TRACE_LEVEL_INFORMATION, ("---> %s res_id=%d\n", __FUNCTION__, m_Id));
+
+    ASSERT(m_busy == 0);
+
     m_adapter->ctrlQueue.DestroyResource(m_Id);
     m_adapter->resourceIdr.PutId(m_Id);
 
