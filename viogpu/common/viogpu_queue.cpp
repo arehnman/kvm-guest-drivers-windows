@@ -621,10 +621,10 @@ void CtrlQueue::CtxResource(bool attach, UINT ctx_id, UINT res_id)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+PAGED_CODE_SEG_END
+
 void CtrlQueue::SubmitCommand(void *cmdbuf, ULONG size, ULONG ctx_id, void (*complete_cb)(void *), void *complete_ctx)
 {
-    PAGED_CODE();
-
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     PGPU_CMD_SUBMIT cmd;
@@ -656,8 +656,6 @@ void CtrlQueue::TransferHostCmd(bool to_host,
                                 void (*complete_cb)(void *),
                                 void *complete_ctx)
 {
-    PAGED_CODE();
-
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     PGPU_CMD_TRANSFER_HOST_3D cmd;
@@ -693,8 +691,6 @@ void CtrlQueue::TransferHostCmd(bool to_host,
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
-
-PAGED_CODE_SEG_END
 
 void CtrlQueue::DestroyResource(UINT res_id)
 {

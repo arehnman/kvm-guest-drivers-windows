@@ -215,7 +215,6 @@ NTSTATUS VioGpuAdapter::StartDevice(_In_ DXGK_START_INFO *pDxgkStartInfo,
         return Status;
     }
 
-    commander.Start();
     Status = vidpn.Start(pNumberOfViews, pNumberOfChildren);
     if (!NT_SUCCESS(Status))
     {
@@ -233,7 +232,6 @@ NTSTATUS VioGpuAdapter::StartDevice(_In_ DXGK_START_INFO *pDxgkStartInfo,
 NTSTATUS VioGpuAdapter::StopDevice(VOID)
 {
     PAGED_CODE();
-    commander.Stop();
 
     virtio_device_reset(&m_VioDev);
 

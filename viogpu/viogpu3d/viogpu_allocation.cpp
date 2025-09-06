@@ -86,15 +86,17 @@ void VioGpuAllocation::MarkBusy()
 
 void VioGpuAllocation::UnmarkBusy()
 {
-    PAGED_CODE();
-
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s res_id=%d\n", __FUNCTION__, m_Id));
 
     if (InterlockedDecrement(&m_busy) == 0)
     {
         KeSetEvent(&m_busyNotification, IO_NO_INCREMENT, FALSE);
     }
+
+    ASSERT(m_busy >= 0);
 }
+
+PAGED_CODE_SEG_BEGIN
 
 D3DDDIFORMAT VioGpuToD3DDDIColorFormat(virtio_gpu_formats format)
 {
