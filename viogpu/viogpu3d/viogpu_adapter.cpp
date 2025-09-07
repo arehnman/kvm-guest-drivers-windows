@@ -812,10 +812,14 @@ VOID VioGpuAdapter::DpcRoutine(VOID)
                 PGPU_CTRL_HDR pcmd = (PGPU_CTRL_HDR)pvbuf->buf;
                 PGPU_CTRL_HDR resp = (PGPU_CTRL_HDR)pvbuf->resp_buf;
 
+                if (resp == NULL)
+                {
+                    DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed resp_buf == NULL\n"));
+                } else
                 if (resp->type >= VIRTIO_GPU_RESP_ERR_UNSPEC)
                 {
                     DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed %d", resp->type));
-                }
+                } else
                 if (resp->type != VIRTIO_GPU_RESP_OK_NODATA)
                 {
                     DbgPrint(TRACE_LEVEL_ERROR,
