@@ -884,7 +884,7 @@ BOOLEAN VioGpuBuf::Init(_In_ UINT cnt)
     KIRQL OldIrql;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
     m_uCountMin = cnt;
 
     for (UINT i = 0; i < cnt; ++i)
@@ -912,6 +912,7 @@ void VioGpuBuf::Close(void)
     KIRQL OldIrql;
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
 
     KeAcquireSpinLock(&m_SpinLock, &OldIrql);
     while (!IsListEmpty(&m_InUseBufs))
@@ -1043,31 +1044,24 @@ PGPU_VBUFFER VioGpuBuf::GetBuf(_In_ int size, _In_ int resp_size, _In_opt_ void 
 
 void VioGpuBuf::FreeBuf(_In_ PGPU_VBUFFER pbuf)
 {
-    KIRQL OldIrql;
-
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s buf = %p\n", __FUNCTION__, pbuf));
-    KeAcquireSpinLock(&m_SpinLock, &OldIrql);
 
-    if (!IsListEmpty(&m_InUseBufs))
+    KIRQL SavedIrql = KeGetCurrentIrql();
+    if (SavedIrql < DISPATCH_LEVEL)
     {
-        PLIST_ENTRY leCurrent = m_InUseBufs.Flink;
-        PGPU_VBUFFER pvbuf = CONTAINING_RECORD(leCurrent, GPU_VBUFFER, list_entry);
-        while (leCurrent && pvbuf)
-        {
-            if (pvbuf == pbuf)
-            {
-                RemoveEntryList(leCurrent);
-                pvbuf = NULL;
-                break;
-            }
-
-            leCurrent = leCurrent->Flink;
-            if (leCurrent)
-            {
-                pvbuf = CONTAINING_RECORD(leCurrent, GPU_VBUFFER, list_entry);
-            }
-        }
+        KeAcquireSpinLock(&m_SpinLock, &SavedIrql);
     }
+    else if (SavedIrql == DISPATCH_LEVEL)
+    {
+        KeAcquireSpinLockAtDpcLevel(&m_SpinLock);
+    }
+    else
+    {
+        VioGpuDbgBreak();
+    }
+
+    RemoveEntryList(&pbuf->list_entry);
+
     if (pbuf->resp_buf && pbuf->resp_size > MAX_INLINE_RESP_SIZE)
     {
         delete[] reinterpret_cast<PBYTE>(pbuf->resp_buf);
@@ -1092,7 +1086,18 @@ void VioGpuBuf::FreeBuf(_In_ PGPU_VBUFFER pbuf)
         InsertTailList(&m_FreeBufs, &pbuf->list_entry);
     }
 
-    KeReleaseSpinLock(&m_SpinLock, OldIrql);
+    if (SavedIrql < DISPATCH_LEVEL)
+    {
+        KeReleaseSpinLock(&m_SpinLock, SavedIrql);
+    }
+    else if (SavedIrql == DISPATCH_LEVEL)
+    {
+        KeReleaseSpinLockFromDpcLevel(&m_SpinLock);
+    }
+    else
+    {
+        VioGpuDbgBreak();
+    }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
