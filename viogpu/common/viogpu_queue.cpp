@@ -842,10 +842,18 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s sgleft %d\n", __FUNCTION__, sgleft));
 
-    Lock(&SavedIrql);
-    ret = AddBuf(&sg[0], outcnt, incnt, buf, NULL, 0);
-    Kick();
-    Unlock(SavedIrql);
+    do
+    {
+        Lock(&SavedIrql);
+        ret = AddBuf(&sg[0], outcnt, incnt, buf, NULL, 0);
+        Kick();
+        Unlock(SavedIrql);
+        if (ret == 0)
+        {
+            break;
+        }
+        KeWaitForSingleObject(&m_CtrlQueueEvent, Executive, KernelMode, FALSE, NULL);
+    } while (ret);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s ret = %d\n", __FUNCTION__, ret));
 
@@ -865,6 +873,9 @@ PGPU_VBUFFER CtrlQueue::DequeueBuffer(_Out_ UINT *len)
     {
         *len = 0;
     }
+
+    KeSetEvent(&m_CtrlQueueEvent, IO_NO_INCREMENT, FALSE);
+
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 
     return buf;

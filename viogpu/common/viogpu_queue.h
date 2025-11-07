@@ -228,6 +228,7 @@ class CtrlQueue : public VioGpuQueue
     CtrlQueue() : VioGpuQueue()
     {
         m_FenceIdr = 0;
+        KeInitializeEvent(&m_CtrlQueueEvent, SynchronizationEvent, FALSE);
     };
 
     PVOID AllocCmd(PGPU_VBUFFER *buf, int sz);
@@ -268,6 +269,7 @@ class CtrlQueue : public VioGpuQueue
 
   private:
     volatile LONG m_FenceIdr;
+    KEVENT m_CtrlQueueEvent;
 };
 
 class CrsrQueue : public VioGpuQueue
