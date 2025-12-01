@@ -229,12 +229,13 @@ class CtrlQueue : public VioGpuQueue
     {
         m_FenceIdr = 0;
         KeInitializeEvent(&m_CtrlQueueEvent, SynchronizationEvent, FALSE);
+        KeInitializeSpinLock(&m_CtrlQueueSpinLock);
     };
 
     PVOID AllocCmd(PGPU_VBUFFER *buf, int sz);
     PVOID AllocCmdResp(PGPU_VBUFFER *buf, int cmd_sz, PVOID resp_buf, int resp_sz);
 
-    UINT QueueBuffer(PGPU_VBUFFER buf);
+    UINT QueueBufferFenced(PGPU_VBUFFER vbuf);
     PGPU_VBUFFER DequeueBuffer(_Out_ UINT *len);
 
     void CreateResource(UINT res_id, UINT format, UINT width, UINT height);
@@ -268,8 +269,11 @@ class CtrlQueue : public VioGpuQueue
     void DestroyCtx(UINT ctx_id);
 
   private:
+    UINT QueueBuffer(PGPU_VBUFFER buf);
+
     volatile LONG m_FenceIdr;
     KEVENT m_CtrlQueueEvent;
+    KSPIN_LOCK m_CtrlQueueSpinLock;
 };
 
 class CrsrQueue : public VioGpuQueue

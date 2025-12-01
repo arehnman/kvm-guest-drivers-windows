@@ -433,11 +433,8 @@ void CtrlQueue::CreateResource(UINT res_id, UINT format, UINT width, UINT height
     cmd->width = width;
     cmd->height = height;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
     // FIXME!!! if
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -466,11 +463,8 @@ void CtrlQueue::CreateResource3D(UINT res_id, VIOGPU_RESOURCE_OPTIONS *options)
     cmd->last_level = options->last_level;
     cmd->nr_samples = options->nr_samples;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
     // FIXME!!! if
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -534,10 +528,7 @@ void CtrlQueue::ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y)
     cmd->r.x = x;
     cmd->r.y = y;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -560,10 +551,7 @@ void CtrlQueue::TransferToHost2D(UINT res_id, ULONG offset, UINT width, UINT hei
     cmd->r.x = x;
     cmd->r.y = y;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -587,10 +575,7 @@ void CtrlQueue::TransferToHost3D(UINT res_id, GPU_BOX *box)
 
     memcpy(&cmd->box, box, sizeof(GPU_BOX));
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -613,10 +598,7 @@ void CtrlQueue::AttachBacking(UINT res_id, PGPU_MEM_ENTRY ents, UINT nents)
     vbuf->data_buf = ents;
     vbuf->data_size = sizeof(*ents) * nents;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -655,8 +637,6 @@ void CtrlQueue::SubmitCommand(void *cmdbuf, ULONG size, ULONG ctx_id, void (*com
     cmd->hdr.type = VIRTIO_GPU_CMD_SUBMIT_3D;
     cmd->size = size;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
     cmd->hdr.ctx_id = ctx_id;
 
     vbuf->data_buf = cmdbuf;
@@ -665,7 +645,7 @@ void CtrlQueue::SubmitCommand(void *cmdbuf, ULONG size, ULONG ctx_id, void (*com
     vbuf->complete_cb = complete_cb;
     vbuf->complete_ctx = complete_ctx;
 
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -699,15 +679,12 @@ void CtrlQueue::TransferHostCmd(bool to_host,
     cmd->stride = options->stride;
     cmd->layer_stride = options->layer_stride;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
     cmd->hdr.ctx_id = ctx_id;
 
     vbuf->complete_cb = complete_cb;
     vbuf->complete_ctx = complete_ctx;
 
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -741,10 +718,7 @@ void CtrlQueue::DetachBacking(UINT res_id)
     cmd->hdr.type = VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING;
     cmd->resource_id = res_id;
 
-    cmd->hdr.flags |= VIRTIO_GPU_FLAG_FENCE;
-    cmd->hdr.fence_id = InterlockedIncrement(&m_FenceIdr);
-
-    QueueBuffer(vbuf);
+    QueueBufferFenced(vbuf);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -879,6 +853,24 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
     } while (ret);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s ret = %d\n", __FUNCTION__, ret));
+
+    return ret;
+}
+
+UINT CtrlQueue::QueueBufferFenced(PGPU_VBUFFER vbuf)
+{
+    UINT ret;
+    KIRQL SavedIrql;
+
+    KeAcquireSpinLock(&m_CtrlQueueSpinLock, &SavedIrql);
+
+    PGPU_CTRL_HDR hdr = (PGPU_CTRL_HDR)vbuf->buf;
+    hdr->fence_id = InterlockedIncrement(&m_FenceIdr);
+    hdr->flags |= VIRTIO_GPU_FLAG_FENCE;
+
+    ret = QueueBuffer(vbuf);
+
+    KeReleaseSpinLock(&m_CtrlQueueSpinLock, SavedIrql);
 
     return ret;
 }
