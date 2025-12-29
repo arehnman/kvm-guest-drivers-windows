@@ -1,3 +1,23 @@
+# Win10 viogpu3d driver installation #
+- Install VirtIOTestCert.cer in Trusted Root Certification Authorities
+- Disable secure boot in UEFI settings
+- Enable test signing mode and reboot<br>
+  ```bcdedit /set testsigning on```
+- Install Windows Graphics Tools<br>
+  _Settings -> Apps -> Optional features -> Add a feature and search for "Graphics Tools"._<br>
+  Click Install
+- Install the viogpu3d driver<br>
+  _Open device manager and select the display adapter -> Update driver -> Browse my computer for drivers._<br>
+  If you have an old version of the viogpu3d driver first uninstall it and make sure to delete the old driver.
+
+# Testing #
+- Install FurMark 2
+- open command prompt and run FurMark
+  ```
+  cd c:\Program Files\Geeks3D\FurMark2_x64
+  furmark --demo furmark-gl
+  ```
+
 # KVM/QEMU Windows guest drivers (virtio-win) #
 
 This repository contains KVM/QEMU Windows guest drivers, for both
