@@ -35,6 +35,7 @@
 #include "helper.h"
 #include "viogpu_allocation.h"
 #include "viogpu_queue.h"
+#include "viogpu_shmem_allocator.h"
 #include <viogpu_command.h>
 #include <viogpu_vidpn.h>
 
@@ -92,6 +93,7 @@ class VioGpuAdapter : IVioGpuPCI
 
     VirtIODevice m_VioDev;
     CPciResources m_PciResources;
+    VioGpuShmemAllocator m_shmem_allocator;
 
     CrsrQueue m_CursorQueue;
     VioGpuBuf m_GpuBuf;
@@ -195,6 +197,10 @@ class VioGpuAdapter : IVioGpuPCI
     {
         return &m_PciResources;
     }
+
+    bool AllocateShmemRange(ULONGLONG size, ULONGLONG alignment, ULONGLONG *offset);
+    void FreeShmemRange(ULONGLONG offset, ULONGLONG size);
+
     BOOLEAN IsMSIEnabled()
     {
         return m_PciResources.IsMSIEnabled();

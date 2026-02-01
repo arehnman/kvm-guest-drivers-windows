@@ -108,6 +108,7 @@ VioGpuAdapter::VioGpuAdapter(_In_ DEVICE_OBJECT *pPhysicalDeviceObject)
 
     RtlZeroMemory(&m_VioDev, sizeof(m_VioDev));
     m_Id = g_InstanceId++;
+    m_shmem_allocator.Init(0);
     m_PendingWorks = 0;
     KeInitializeEvent(&m_ConfigUpdateEvent, SynchronizationEvent, FALSE);
     m_bStopWorkThread = FALSE;
@@ -579,6 +580,20 @@ NTSTATUS VioGpuAdapter::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO *pQ
                 return STATUS_NOT_SUPPORTED;
             }
     }
+}
+
+bool VioGpuAdapter::AllocateShmemRange(ULONGLONG size, ULONGLONG alignment, ULONGLONG *offset)
+{
+    PAGED_CODE();
+
+    return m_shmem_allocator.Allocate(size, alignment, offset);
+}
+
+void VioGpuAdapter::FreeShmemRange(ULONGLONG offset, ULONGLONG size)
+{
+    PAGED_CODE();
+
+    m_shmem_allocator.Free(offset, size);
 }
 
 NTSTATUS VioGpuAdapter::Escape(_In_ CONST DXGKARG_ESCAPE *pEscape)
@@ -1118,6 +1133,8 @@ NTSTATUS VioGpuAdapter::VioGpuAdapterInit()
         return status;
     }
 
+    m_shmem_allocator.Init(m_VioDev.shmem_len);
+
     m_u64HostFeatures = virtio_get_features(&m_VioDev);
     m_u64GuestFeatures = 0;
     do
@@ -1189,6 +1206,7 @@ void VioGpuAdapter::VioGpuAdapterClose()
 {
     PAGED_CODE();
     DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+    m_shmem_allocator.Reset();
 
     if (IsHardwareInit())
     {
