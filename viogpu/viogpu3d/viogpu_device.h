@@ -32,10 +32,20 @@ class VioGpuDevice
     }
 
     CtrlQueue *GetCtrlQueue();
+    PEPROCESS GetOwnerProcess() const
+    {
+        return m_owner_process;
+    }
+    HANDLE GetOwnerProcessId() const
+    {
+        return m_owner_pid;
+    }
 
   private:
     VioGpuAdapter *m_pAdapter;
     ULONG m_id;
+    PEPROCESS m_owner_process;
+    HANDLE m_owner_pid;
 };
 
 class VioGpuDeviceAllocation

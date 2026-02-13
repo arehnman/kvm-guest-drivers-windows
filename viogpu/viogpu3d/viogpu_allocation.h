@@ -10,6 +10,7 @@
 #include "viogpum.h"
 
 class VioGpuAdapter;
+class VioGpuDevice;
 
 class VioGpuResource
 {
@@ -83,8 +84,23 @@ class VioGpuAllocation
 
     NTSTATUS EscapeResourceInfo(VIOGPU_RES_INFO_REQ *resInfo);
     NTSTATUS EscapeResourceBusy(VIOGPU_RES_BUSY_REQ *resBusy);
+    NTSTATUS EscapeResourceMapBlob(VIOGPU_RES_MAP_BLOB_REQ *resMap, VioGpuDevice *device);
+    NTSTATUS EscapeResourceUnmapBlob(VIOGPU_RES_UNMAP_BLOB_REQ *resUnmap, VioGpuDevice *device);
 
   private:
+    struct BlobUserMapping
+    {
+        LIST_ENTRY ListEntry;
+        PEPROCESS Process;
+        HANDLE ProcessId;
+        PVOID UserVa;
+        ULONGLONG Size;
+        ULONG MapInfo;
+        ULONG RefCount;
+    };
+
+    BlobUserMapping *FindBlobMappingLocked(HANDLE process_id, PEPROCESS process);
+
     VioGpuAdapter *m_adapter;
 
     VIOGPU_RESOURCE_OPTIONS m_options;

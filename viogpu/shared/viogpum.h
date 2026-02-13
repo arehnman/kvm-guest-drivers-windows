@@ -64,6 +64,8 @@ typedef struct _VIOGPU_ADAPTERINFO
 
 #define VIOGPU_RES_INFO              0x100
 #define VIOGPU_RES_BUSY              0x101
+#define VIOGPU_RES_MAP_BLOB          0x102
+#define VIOGPU_RES_UNMAP_BLOB        0x103
 
 #define VIOGPU_CTX_INIT              0x200
 
@@ -111,6 +113,24 @@ typedef struct _VIOGPU_RES_BUSY_REQ
 #pragma pack()
 
 #pragma pack(1)
+typedef struct _VIOGPU_RES_MAP_BLOB_REQ
+{
+    D3DKMT_HANDLE ResHandle;
+    ULONGLONG Offset;
+    ULONGLONG Size;
+    ULONGLONG UserVa;
+    ULONG MapInfo;
+} VIOGPU_RES_MAP_BLOB_REQ;
+#pragma pack()
+
+#pragma pack(1)
+typedef struct _VIOGPU_RES_UNMAP_BLOB_REQ
+{
+    D3DKMT_HANDLE ResHandle;
+} VIOGPU_RES_UNMAP_BLOB_REQ;
+#pragma pack()
+
+#pragma pack(1)
 typedef struct _VIOGPU_CTX_INIT_REQ
 {
     UINT CapsetID;
@@ -130,6 +150,8 @@ typedef struct _VIOGPU_ESCAPE
 
         VIOGPU_RES_INFO_REQ ResourceInfo;
         VIOGPU_RES_BUSY_REQ ResourceBusy;
+        VIOGPU_RES_MAP_BLOB_REQ ResourceMapBlob;
+        VIOGPU_RES_UNMAP_BLOB_REQ ResourceUnmapBlob;
 
         VIOGPU_CTX_INIT_REQ CtxInit;
     } DUMMYUNIONNAME;

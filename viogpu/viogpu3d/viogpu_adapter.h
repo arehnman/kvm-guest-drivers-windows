@@ -198,6 +198,13 @@ class VioGpuAdapter : IVioGpuPCI
         return &m_PciResources;
     }
 
+    ULONGLONG GetShmemLen() const
+    {
+        return m_VioDev.shmem_len;
+    }
+
+    bool GetShmemCpuTranslatedAddress(PHYSICAL_ADDRESS *out_pa);
+
     bool AllocateShmemRange(ULONGLONG size, ULONGLONG alignment, ULONGLONG *offset);
     void FreeShmemRange(ULONGLONG offset, ULONGLONG size);
 

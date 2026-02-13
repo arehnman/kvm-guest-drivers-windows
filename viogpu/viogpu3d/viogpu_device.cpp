@@ -14,9 +14,12 @@ PAGED_CODE_SEG_BEGIN
 VioGpuDevice::VioGpuDevice(VioGpuAdapter *pAdapter)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
 
     m_pAdapter = pAdapter;
+    m_owner_process = PsGetCurrentProcess();
+    m_owner_pid = PsGetCurrentProcessId();
+    ObReferenceObject(m_owner_process);
     m_id = pAdapter->ctxIdr.GetId();
     pAdapter->ctrlQueue.CreateCtx(m_id, 0);
 }
@@ -24,10 +27,15 @@ VioGpuDevice::VioGpuDevice(VioGpuAdapter *pAdapter)
 VioGpuDevice::~VioGpuDevice()
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s", __FUNCTION__));
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s\n", __FUNCTION__));
 
     m_pAdapter->ctrlQueue.DestroyCtx(m_id);
     m_pAdapter->ctxIdr.PutId(m_id);
+    if (m_owner_process)
+    {
+        ObDereferenceObject(m_owner_process);
+        m_owner_process = NULL;
+    }
 }
 
 NTSTATUS VioGpuDevice::Init(VIOGPU_CTX_INIT_REQ *pOptions)
