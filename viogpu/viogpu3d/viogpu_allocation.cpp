@@ -78,12 +78,8 @@ void VioGpuAllocation::DetachBacking()
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
-PAGED_CODE_SEG_BEGIN
-
 void VioGpuAllocation::MarkBusy()
 {
-    PAGED_CODE();
-
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s res_id=%d\n", __FUNCTION__, m_Id));
 
     InterlockedIncrement(&m_busy);
