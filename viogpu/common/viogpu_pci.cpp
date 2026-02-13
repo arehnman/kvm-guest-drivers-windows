@@ -292,6 +292,13 @@ VirtIOSystemOps VioGpuSystemOps = {
 PVOID CPciBar::GetVA(PDXGKRNL_INTERFACE pDxgkInterface)
 {
     NTSTATUS Status;
+
+    if (m_uSize > (ULONGLONG)MAXULONG)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s ERROR BAR size 0x%I64x exceeds 4GB\n", __FUNCTION__, m_uSize));
+        return 0;
+    }
+
     if (m_BaseVA == nullptr)
     {
         if (m_bPortSpace)
@@ -300,7 +307,7 @@ PVOID CPciBar::GetVA(PDXGKRNL_INTERFACE pDxgkInterface)
             {
                 Status = pDxgkInterface->DxgkCbMapMemory(pDxgkInterface->DeviceHandle,
                                                          m_BasePA,
-                                                         m_uSize,
+                                                         (ULONG)m_uSize,
                                                          TRUE,
                                                          FALSE,
                                                          MmNonCached,
@@ -325,7 +332,7 @@ PVOID CPciBar::GetVA(PDXGKRNL_INTERFACE pDxgkInterface)
         {
             Status = pDxgkInterface->DxgkCbMapMemory(pDxgkInterface->DeviceHandle,
                                                      m_BasePA,
-                                                     m_uSize,
+                                                     (ULONG)m_uSize,
                                                      FALSE,
                                                      FALSE,
                                                      MmNonCached,
@@ -435,6 +442,21 @@ bool CPciResources::Init(PDXGKRNL_INTERFACE pDxgkInterface, PCM_RESOURCE_LIST pR
                         bar = virtio_get_bar_index(&pci_config, Start);
                         DbgPrint(TRACE_LEVEL_FATAL,
                                  ("Found IO memory at %08I64X(%d) bar %d\n", Start.QuadPart, len, bar));
+                        if (bar < 0)
+                        {
+                            break;
+                        }
+                        m_Bars[bar] = CPciBar(Start, len, false, true);
+                    }
+                    break;
+                case CmResourceTypeMemoryLarge:
+                    {
+                        ULONGLONG len;
+                        PHYSICAL_ADDRESS Start;
+                        len = RtlCmDecodeMemIoResource(pResDescriptor, (PULONGLONG)&Start.QuadPart);
+                        bar = virtio_get_bar_index(&pci_config, Start);
+                        DbgPrint(TRACE_LEVEL_VERBOSE, ("Found CM_RESOURCE_MEMORY_LARGE_XXX start=%llx len=%llx bar=%x\n", 
+                            Start.QuadPart, len, bar));
                         if (bar < 0)
                         {
                             break;

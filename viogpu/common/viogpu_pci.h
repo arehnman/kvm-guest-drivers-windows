@@ -8,7 +8,7 @@
 class CPciBar
 {
   public:
-    CPciBar(PHYSICAL_ADDRESS BasePA, ULONG uSize, bool bPortSpace, bool bIoMapped)
+    CPciBar(PHYSICAL_ADDRESS BasePA, ULONGLONG uSize, bool bPortSpace, bool bIoMapped)
         : m_BasePA(BasePA), m_uSize(uSize), m_BaseVA(nullptr), m_bPortSpace(bPortSpace), m_bIoMapped(bIoMapped)
     {
         ASSERT(!m_bPortSpace || m_BasePA.HighPart == 0);
@@ -23,7 +23,7 @@ class CPciBar
         ASSERT(m_BaseVA == nullptr);
     }
 
-    ULONG GetSize()
+    ULONGLONG GetSize()
     {
         return m_uSize;
     }
@@ -46,7 +46,7 @@ class CPciBar
 
   private:
     PHYSICAL_ADDRESS m_BasePA;
-    ULONG m_uSize;
+    ULONGLONG m_uSize;
     PVOID m_BaseVA;
     bool m_bPortSpace;
     bool m_bIoMapped;
@@ -69,7 +69,7 @@ class CPciResources
 
     bool Init(PDXGKRNL_INTERFACE pDxgkInterface, PCM_RESOURCE_LIST pResList);
 
-    ULONG GetBarSize(UINT bar)
+    ULONGLONG GetBarSize(UINT bar)
     {
         ASSERT(bar < PCI_TYPE0_ADDRESSES);
         return m_Bars[bar].GetSize();
