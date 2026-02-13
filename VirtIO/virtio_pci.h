@@ -1,4 +1,4 @@
-/*
+﻿/*
 * Virtio PCI driver
 *
 * This module allows virtio devices to be used over a virtual PCI device.
@@ -110,6 +110,9 @@
 /* PCI configuration access */
 #define VIRTIO_PCI_CAP_PCI_CFG    5
 
+#define VIRTIO_PCI_CAP_SHARED_MEMORY_CFG 8
+#define VIRTIO_PCI_CAP_MAX (VIRTIO_PCI_CAP_SHARED_MEMORY_CFG + 1)
+
 /* This is the PCI capability header: */
 struct virtio_pci_cap {
     __u8 cap_vndr;   /* Generic PCI field: PCI_CAPABILITY_ID_VENDOR_SPECIFIC */
@@ -117,7 +120,8 @@ struct virtio_pci_cap {
     __u8 cap_len;    /* Generic PCI field: capability length */
     __u8 cfg_type;   /* Identifies the structure. */
     __u8 bar;        /* Where to find it. */
-    __u8 padding[3]; /* Pad to full dword. */
+    __u8 id;         /* Identifies the region for shared memory capability */
+    __u8 padding[2]; /* Pad to full dword. */
     __le32 offset;   /* Offset within bar. */
     __le32 length;   /* Length of the structure, in bytes. */
 };
@@ -125,6 +129,12 @@ struct virtio_pci_cap {
 struct virtio_pci_notify_cap {
     struct virtio_pci_cap cap;
     __le32 notify_off_multiplier; /* Multiplier for queue_notify_off. */
+};
+
+struct virtio_pci_cap64 {
+    struct virtio_pci_cap cap;
+    __le32 offset_hi;
+    __le32 length_hi;
 };
 
 /* Fields in VIRTIO_PCI_CAP_COMMON_CFG: */
@@ -264,6 +274,12 @@ struct virtio_device {
 
     size_t config_len;
     size_t notify_len;
+
+    volatile unsigned char *shmem_base;
+    u64 shmem_len;
+    u64 shmem_offset;
+    u8 shmem_bar;
+    u32 shmem_id;
 
     // maximum number of virtqueues that fit in the memory block pointed to by info
     ULONG maxQueues;
