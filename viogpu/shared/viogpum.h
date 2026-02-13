@@ -164,6 +164,9 @@ typedef struct _VIOGPU_CREATE_ALLOCATION_EXCHANGE
 {
     VIOGPU_RESOURCE_OPTIONS ResourceOptions;
     ULONGLONG Size;
+    ULONGLONG BlobId;
+    ULONG BlobMem;
+    ULONG BlobFlags;
 } VIOGPU_CREATE_ALLOCATION_EXCHANGE;
 #pragma pack()
 

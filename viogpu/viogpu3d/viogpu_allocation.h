@@ -20,7 +20,7 @@ class VioGpuResource
 class VioGpuAllocation
 {
   public:
-    VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_RESOURCE_OPTIONS *options);
+    VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_CREATE_ALLOCATION_EXCHANGE *exchange);
     ~VioGpuAllocation(void);
 
     UINT GetId(void)
@@ -46,6 +46,29 @@ class VioGpuAllocation
         return (m_options.flags & VIRGL_RESOURCE_FLAG_MAP_COHERENT) != 0;
     }
 
+    bool IsValid() const
+    {
+        return m_valid;
+    }
+    bool IsBlob() const
+    {
+        return m_is_blob;
+    }
+    ULONGLONG GetBlobSize() const
+    {
+        return m_blob_size;
+    }
+    ULONG GetBlobFlags() const
+    {
+        return m_blob_flags;
+    }
+    bool IsBlobCreated() const
+    {
+        return m_blob_created;
+    }
+
+    void EnsureBlobCreated(ULONG ctx_id);
+
     void AttachBacking(MDL *pMdl, size_t pageCount, size_t pageOffset);
     void DetachBacking();
 
@@ -66,6 +89,25 @@ class VioGpuAllocation
 
     VIOGPU_RESOURCE_OPTIONS m_options;
     UINT m_Id;
+    bool m_is_blob;
+    bool m_valid;
+    ULONGLONG m_blob_size;
+    ULONGLONG m_blob_id;
+    ULONG m_blob_mem;
+    ULONG m_blob_flags;
+    ULONGLONG m_blob_offset;
+    bool m_blob_shmem_allocated;
+    ULONG m_blob_map_info;
+    bool m_blob_mapped;
+    bool m_blob_created;
+    NTSTATUS m_blob_create_status;
+    ULONG m_blob_create_resp_type;
+    FAST_MUTEX m_blob_map_mutex;
+    LIST_ENTRY m_blob_map_list;
+    ULONG m_blob_map_user_refs;
+    volatile LONG m_resource_created;
+
+    void CreateBlobResource(UINT ctx_id);    
 
     MDL *m_pMDL;
     size_t m_pageCount;

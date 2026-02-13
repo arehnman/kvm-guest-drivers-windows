@@ -324,11 +324,44 @@ NTSTATUS VioGpuDevice::OpenAllocation(_In_ CONST DXGKARG_OPENALLOCATION *pOpenAl
     {
         DXGK_OPENALLOCATIONINFO *openAllocationInfo = &pOpenAllocation->pOpenAllocation[i];
         VioGpuAllocation *allocation = m_pAdapter->AllocationFromHandle(openAllocationInfo->hAllocation);
-        openAllocationInfo->hDeviceSpecificAllocation = new (NonPagedPoolNx) VioGpuDeviceAllocation(this, allocation);
+
+        if (!allocation)
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("%s missing allocation handle=%p\n", __FUNCTION__, openAllocationInfo->hAllocation));
+            goto fail;
+        }
+
+        VioGpuDeviceAllocation *devAlloc = new (NonPagedPoolNx) VioGpuDeviceAllocation(this, allocation);
+        openAllocationInfo->hDeviceSpecificAllocation = devAlloc;
+
+        if (!devAlloc)
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("%s failed to create device allocation\n", __FUNCTION__));
+            goto fail;
+        }
+        if (allocation->IsBlob() && !allocation->IsBlobCreated())
+        {
+            DbgPrint(TRACE_LEVEL_ERROR,
+                     ("%s blob create failed res_id=0x%x\n", __FUNCTION__, allocation->GetId()));
+            goto fail;
+        }
     }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
     return STATUS_SUCCESS;
+
+fail:
+    for (UINT j = 0; j < pOpenAllocation->NumAllocations; j++)
+    {
+        DXGK_OPENALLOCATIONINFO *info = &pOpenAllocation->pOpenAllocation[j];
+        if (info->hDeviceSpecificAllocation)
+        {
+            delete reinterpret_cast<VioGpuDeviceAllocation *>(info->hDeviceSpecificAllocation);
+            info->hDeviceSpecificAllocation = NULL;
+        }
+    }
+    DbgPrint(TRACE_LEVEL_ERROR, ("<--- %s failed\n", __FUNCTION__));
+    return STATUS_INSUFFICIENT_RESOURCES;
 }
 
 CtrlQueue *VioGpuDevice::GetCtrlQueue()
@@ -348,6 +381,7 @@ VioGpuDeviceAllocation::VioGpuDeviceAllocation(VioGpuDevice *device, VioGpuAlloc
     m_pAllocation = allocation;
     m_pDevice = device;
 
+    m_pAllocation->EnsureBlobCreated(m_pDevice->GetId());
     m_pDevice->GetCtrlQueue()->CtxResource(true, m_pDevice->GetId(), m_pAllocation->GetId());
 }
 
