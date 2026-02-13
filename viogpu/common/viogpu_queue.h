@@ -240,6 +240,18 @@ class CtrlQueue : public VioGpuQueue
 
     void CreateResource(UINT res_id, UINT format, UINT width, UINT height);
     void CreateResource3D(UINT res_id, VIOGPU_RESOURCE_OPTIONS *options);
+
+    NTSTATUS CreateResourceBlob(UINT res_id,
+                                ULONGLONG size,
+                                ULONG blob_mem,
+                                ULONG blob_flags,
+                                ULONGLONG blob_id,
+                                UINT ctx_id,
+                                PGPU_MEM_ENTRY ents,
+                                UINT nents,
+                                ULONG *out_resp_type);
+    BOOLEAN ResourceMapBlob(UINT res_id, ULONGLONG offset, ULONG *map_info);
+    void ResourceUnmapBlob(UINT res_id);
     void DestroyResource(UINT id);
     void CtxResource(bool attach, UINT ctx_id, UINT res_id);
 

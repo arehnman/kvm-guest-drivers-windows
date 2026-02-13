@@ -58,6 +58,9 @@ enum virtio_gpu_ctrl_type
     VIRTIO_GPU_CMD_GET_CAPSET_INFO,
     VIRTIO_GPU_CMD_GET_CAPSET,
     VIRTIO_GPU_CMD_GET_EDID,
+    VIRTIO_GPU_CMD_RESOURCE_ASSIGN_UUID,
+    VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB,
+    VIRTIO_GPU_CMD_SET_SCANOUT_BLOB,
 
     /* 3d commands */
     VIRTIO_GPU_CMD_CTX_CREATE = 0x0200,
@@ -68,6 +71,8 @@ enum virtio_gpu_ctrl_type
     VIRTIO_GPU_CMD_TRANSFER_TO_HOST_3D,
     VIRTIO_GPU_CMD_TRANSFER_FROM_HOST_3D,
     VIRTIO_GPU_CMD_SUBMIT_3D,
+    VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB,
+    VIRTIO_GPU_CMD_RESOURCE_UNMAP_BLOB,
 
     /* cursor commands */
     VIRTIO_GPU_CMD_UPDATE_CURSOR = 0x0300,
@@ -79,6 +84,8 @@ enum virtio_gpu_ctrl_type
     VIRTIO_GPU_RESP_OK_CAPSET_INFO,
     VIRTIO_GPU_RESP_OK_CAPSET,
     VIRTIO_GPU_RESP_OK_EDID,
+    VIRTIO_GPU_RESP_OK_RESOURCE_UUID,
+    VIRTIO_GPU_RESP_OK_MAP_INFO,
 
     /* error responses */
     VIRTIO_GPU_RESP_ERR_UNSPEC = 0x1200,
@@ -90,6 +97,18 @@ enum virtio_gpu_ctrl_type
 };
 
 #define VIRTIO_GPU_EVENT_DISPLAY (1 << 0)
+
+/* Blob resource memory types */
+#define VIRTIO_GPU_BLOB_MEM_GUEST         0x0001
+#define VIRTIO_GPU_BLOB_MEM_HOST3D        0x0002
+#define VIRTIO_GPU_BLOB_MEM_HOST3D_GUEST  0x0003
+#define VIRTIO_GPU_BLOB_MEM_GUEST_VRAM    0x0004
+
+/* Blob resource flags */
+#define VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE     0x0001
+#define VIRTIO_GPU_BLOB_FLAG_USE_SHAREABLE    0x0002
+#define VIRTIO_GPU_BLOB_FLAG_USE_CROSS_DEVICE 0x0004
+#define VIRTGPU_BLOB_FLAG_USE_MAPPABLE VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE
 
 enum virtio_gpu_formats
 {
@@ -233,6 +252,56 @@ typedef struct virtio_gpu_resource_detach_backing
     ULONG padding;
 } GPU_RES_DETACH_BACKING, *PGPU_RES_DETACH_BACKING;
 #pragma pack()
+
+/* VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB */
+#pragma pack(1)
+typedef struct virtio_gpu_resource_create_blob
+{
+    GPU_CTRL_HDR hdr;
+    ULONG resource_id;
+    ULONG blob_mem;
+    ULONG blob_flags;
+    ULONG nr_entries;
+    ULONGLONG blob_id;
+    ULONGLONG size;
+} GPU_RES_CREATE_BLOB, *PGPU_RES_CREATE_BLOB;
+#pragma pack()
+
+/* VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB */
+#pragma pack(1)
+typedef struct virtio_gpu_resource_map_blob
+{
+    GPU_CTRL_HDR hdr;
+    ULONG resource_id;
+    ULONG padding;
+    ULONGLONG offset;
+} GPU_RES_MAP_BLOB, *PGPU_RES_MAP_BLOB;
+#pragma pack()
+
+/* VIRTIO_GPU_CMD_RESOURCE_UNMAP_BLOB */
+#pragma pack(1)
+typedef struct virtio_gpu_resource_unmap_blob
+{
+    GPU_CTRL_HDR hdr;
+    ULONG resource_id;
+    ULONG padding;
+} GPU_RES_UNMAP_BLOB, *PGPU_RES_UNMAP_BLOB;
+#pragma pack()
+
+  /* VIRTIO_GPU_RESP_OK_MAP_INFO */
+  #define VIRTIO_GPU_MAP_CACHE_MASK     0x0f
+  #define VIRTIO_GPU_MAP_CACHE_NONE     0x00
+  #define VIRTIO_GPU_MAP_CACHE_CACHED   0x01
+  #define VIRTIO_GPU_MAP_CACHE_UNCACHED 0x02
+  #define VIRTIO_GPU_MAP_CACHE_WC       0x03
+  #pragma pack(1)
+  typedef struct virtio_gpu_resp_map_info
+  {
+      GPU_CTRL_HDR hdr;
+      ULONG map_info;
+      ULONG padding;
+  } GPU_RESP_MAP_INFO, *PGPU_RESP_MAP_INFO;
+  #pragma pack()
 
 /* VIRTIO_GPU_RESP_OK_DISPLAY_INFO */
 #define VIRTIO_GPU_MAX_SCANOUTS 16

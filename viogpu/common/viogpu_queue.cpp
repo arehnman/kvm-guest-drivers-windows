@@ -469,6 +469,205 @@ void CtrlQueue::CreateResource3D(UINT res_id, VIOGPU_RESOURCE_OPTIONS *options)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+NTSTATUS CtrlQueue::CreateResourceBlob(UINT res_id,
+                                       ULONGLONG size,
+                                       ULONG blob_mem,
+                                       ULONG blob_flags,
+                                       ULONGLONG blob_id,
+                                       UINT ctx_id,
+                                       PGPU_MEM_ENTRY ents,
+                                       UINT nents,
+                                       ULONG *out_resp_type)
+{
+    PAGED_CODE();
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s res_id = 0x%x\n", __FUNCTION__, res_id));
+
+    PGPU_RES_CREATE_BLOB cmd;
+    PGPU_VBUFFER vbuf;
+    PGPU_CTRL_HDR resp_buf;
+    KEVENT event;
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+
+    if (out_resp_type)
+    {
+        *out_resp_type = 0;
+    }
+
+    cmd = (PGPU_RES_CREATE_BLOB)AllocCmdResp(&vbuf, sizeof(*cmd), NULL, sizeof(GPU_CTRL_HDR));
+    if (!cmd || !vbuf)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory(cmd, sizeof(*cmd));
+    resp_buf = (PGPU_CTRL_HDR)vbuf->resp_buf;
+    if (resp_buf)
+    {
+        RtlZeroMemory(resp_buf, sizeof(GPU_CTRL_HDR));
+    }
+
+    cmd->hdr.type = VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB;
+    cmd->hdr.ctx_id = ctx_id;
+    cmd->resource_id = res_id;
+    cmd->blob_mem = blob_mem;
+    cmd->blob_flags = blob_flags;
+    cmd->nr_entries = nents;
+    cmd->blob_id = blob_id;
+    cmd->size = size;
+
+    DbgPrint(TRACE_LEVEL_VERBOSE,
+             ("---> %s hdr.type=0x%x ctx_id=0x%x res_id=0x%x blob_mem=0x%x blob_flags=0x%x nr_entries=0x%x blob_id=0x%llx size=0x%llx\n",
+              __FUNCTION__, cmd->hdr.type, cmd->hdr.ctx_id, cmd->resource_id, cmd->blob_mem, cmd->blob_flags,
+              cmd->nr_entries, cmd->blob_id, cmd->size));
+
+    if (ents && nents)
+    {
+        vbuf->data_buf = ents;
+        vbuf->data_size = sizeof(*ents) * nents;
+    }
+
+    KeInitializeEvent(&event, NotificationEvent, FALSE);
+    vbuf->complete_cb = NotifyEventCompleteCB;
+    vbuf->complete_ctx = &event;
+    vbuf->auto_release = false;
+
+    LARGE_INTEGER timeout = {0};
+    timeout.QuadPart = Int32x32To64(1000, -10000);
+
+    QueueBufferFenced(vbuf);
+
+    status = KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, &timeout);
+    if (status == STATUS_TIMEOUT)
+    {
+        DbgPrint(TRACE_LEVEL_FATAL, ("---> FATAL %s timed out res_id = 0x%x\n", __FUNCTION__, res_id));
+        VioGpuDbgBreak();
+        goto out;
+    }
+
+    if (out_resp_type)
+    {
+        *out_resp_type = resp_buf ? resp_buf->type : 0;
+    }
+
+    if (!resp_buf)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("---> %s ERROR resp_buf == NULL res_id = 0x%x\n", __FUNCTION__, res_id));
+        status = STATUS_UNSUCCESSFUL;
+        goto out;
+    }
+
+    if (resp_buf->type >= VIRTIO_GPU_RESP_ERR_UNSPEC)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR,
+                 ("---> %s ERROR Command failed resp->type=0x%x pcmd->type=0x%x res_id = 0x%x\n",
+                  __FUNCTION__,
+                  resp_buf->type,
+                  cmd->hdr.type,
+                  res_id));
+        status = STATUS_UNSUCCESSFUL;
+        goto out;
+    }
+
+    if (resp_buf->type != VIRTIO_GPU_RESP_OK_NODATA)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("---> %s ERROR invalid response type 0x%x res_id = 0x%x\n", __FUNCTION__, resp_buf->type, res_id));
+        status = STATUS_UNSUCCESSFUL;
+        goto out;
+    }
+
+    status = STATUS_SUCCESS;
+
+out:
+    ReleaseBuffer(vbuf);
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id = 0x%x status = 0x%x\n", __FUNCTION__, res_id, status));
+    return status;
+}
+
+BOOLEAN CtrlQueue::ResourceMapBlob(UINT res_id, ULONGLONG offset, ULONG *map_info)
+{
+    PAGED_CODE();
+
+    if (!map_info)
+    {
+        return FALSE;
+    }
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s res_id = 0x%x offset = 0x%llx\n", __FUNCTION__, res_id, offset));
+
+    PGPU_RES_MAP_BLOB cmd;
+    PGPU_VBUFFER vbuf;
+    PGPU_RESP_MAP_INFO resp_buf;
+    KEVENT event;
+    NTSTATUS status;
+    BOOLEAN ret = FALSE;
+
+    resp_buf = reinterpret_cast<PGPU_RESP_MAP_INFO>(new (NonPagedPoolNx) BYTE[sizeof(GPU_RESP_MAP_INFO)]);
+    if (!resp_buf)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("---> %s ERROR Failed allocate %d bytes\n", __FUNCTION__, sizeof(GPU_RESP_MAP_INFO)));
+        return FALSE;
+    }
+
+    cmd = (PGPU_RES_MAP_BLOB)AllocCmdResp(&vbuf, sizeof(GPU_RES_MAP_BLOB), resp_buf, sizeof(GPU_RESP_MAP_INFO));
+    RtlZeroMemory(cmd, sizeof(GPU_RES_MAP_BLOB));
+
+    cmd->hdr.type = VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB;
+    cmd->resource_id = res_id;
+    cmd->offset = offset;
+
+    KeInitializeEvent(&event, NotificationEvent, FALSE);
+    vbuf->complete_cb = NotifyEventCompleteCB;
+    vbuf->complete_ctx = &event;
+    vbuf->auto_release = false;
+
+    LARGE_INTEGER timeout = {0};
+    timeout.QuadPart = Int32x32To64(1000, -10000);
+
+    QueueBuffer(vbuf);
+
+    status = KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, &timeout);
+
+    if (status == STATUS_TIMEOUT)
+    {
+        DbgPrint(TRACE_LEVEL_FATAL, ("---> %s FATAL timed out\n", __FUNCTION__));
+        goto out;
+    }
+
+    if (resp_buf->hdr.type != VIRTIO_GPU_RESP_OK_MAP_INFO)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("---> %s ERROR invalid response type 0x%x\n", __FUNCTION__, resp_buf->hdr.type));
+        goto out;
+    }
+
+    *map_info = resp_buf->map_info;
+    ret = TRUE;
+
+out:
+    ReleaseBuffer(vbuf);
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id = 0x%x\n", __FUNCTION__, res_id));
+    return ret;
+}
+
+void CtrlQueue::ResourceUnmapBlob(UINT res_id)
+{
+    PAGED_CODE();
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s res_id = 0x%x\n", __FUNCTION__, res_id));
+
+    PGPU_RES_UNMAP_BLOB cmd;
+    PGPU_VBUFFER vbuf;
+    cmd = (PGPU_RES_UNMAP_BLOB)AllocCmd(&vbuf, sizeof(*cmd));
+    RtlZeroMemory(cmd, sizeof(*cmd));
+
+    cmd->hdr.type = VIRTIO_GPU_CMD_RESOURCE_UNMAP_BLOB;
+    cmd->resource_id = res_id;
+
+    QueueBufferFenced(vbuf);
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id = 0x%x\n", __FUNCTION__, res_id));
+}
+
 void CtrlQueue::CreateCtx(UINT ctx_id, UINT context_init)
 {
     PAGED_CODE();
