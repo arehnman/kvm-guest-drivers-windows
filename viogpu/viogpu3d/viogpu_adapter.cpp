@@ -926,12 +926,20 @@ VOID VioGpuAdapter::DpcRoutine(VOID)
                 } else
                 if (resp->type >= VIRTIO_GPU_RESP_ERR_UNSPEC)
                 {
-                    DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed %d", resp->type));
+                    DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed resp->type=%x pcmd->type=%x\n", resp->type, pcmd->type));
+                } else
+                if (resp->type == VIRTIO_GPU_RESP_OK_NODATA)
+                {
+                    DbgPrint(TRACE_LEVEL_INFORMATION,
+                             ("<--- %s fence_id=%llu cmd_type=%lu\n",
+                              __FUNCTION__,
+                              (ULONGLONG)resp->fence_id,
+                              pcmd->type));
                 } else
                 if (resp->type != VIRTIO_GPU_RESP_OK_NODATA)
                 {
-                    DbgPrint(TRACE_LEVEL_ERROR,
-                             ("<--- %s type = %xlu flags = %lu fence_id = %llu ctx_id = %lu cmd_type = %lu\n",
+                    DbgPrint(TRACE_LEVEL_VERBOSE,
+                             ("<--- %s type = %xlu flags = %lx fence_id = %llx ctx_id = %lx cmd_type = %lx\n",
                               __FUNCTION__,
                               resp->type,
                               resp->flags,
