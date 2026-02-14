@@ -52,7 +52,12 @@ typedef struct _VIOGPU_ADAPTERINFO
     struct
     {
         UINT Supports3d : 1;
-        UINT Reserved : 31;
+        UINT has_capset_query_fix : 1;
+        UINT has_resource_blob : 1;
+        UINT has_host_visible : 1;
+        UINT has_resource_assign_uuid : 1;
+        UINT has_context_init : 1;
+        UINT Reserved : 26;
     } Flags;
     ULONGLONG SupportedCapsetIDs;
 } VIOGPU_ADAPTERINFO;

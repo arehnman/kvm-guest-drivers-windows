@@ -517,8 +517,12 @@ typedef struct _COLOR_CHARACTERISTICS
 
 #pragma pack(pop)
 
-#define VIRTIO_GPU_F_VIRGL 0
-#define VIRTIO_GPU_F_EDID  1
+#define VIRTIO_GPU_F_VIRGL          0
+#define VIRTIO_GPU_F_EDID           1
+#define VIRTIO_GPU_F_RESOURCE_UUID  2
+#define VIRTIO_GPU_F_RESOURCE_BLOB  3
+#define VIRTIO_GPU_F_CONTEXT_INIT   4
+#define VIRTIO_GPU_F_RESOURCE_SYNC  5
 
 #define ISR_REASON_DISPLAY 1
 #define ISR_REASON_CURSOR  2

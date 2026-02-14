@@ -469,7 +469,18 @@ NTSTATUS VioGpuAdapter::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO *pQ
                 }
                 VIOGPU_ADAPTERINFO *info = (VIOGPU_ADAPTERINFO *)pQueryAdapterInfo->pOutputData;
                 info->IamVioGPU = VIOGPU_IAM;
-                info->Flags.Supports3d = virtio_is_feature_enabled(m_u64HostFeatures, VIRTIO_GPU_F_VIRGL);
+                info->Flags.Supports3d =
+                   virtio_is_feature_enabled(m_u64HostFeatures, VIRTIO_GPU_F_VIRGL);
+                /* Driver implements the capset query fix; gate it on 3D */
+                info->Flags.has_capset_query_fix = info->Flags.Supports3d;
+                info->Flags.has_context_init =
+                   virtio_is_feature_enabled(m_u64HostFeatures, VIRTIO_GPU_F_CONTEXT_INIT);
+                info->Flags.has_host_visible =
+                   (m_VioDev.shmem_len && m_PciResources.GetPciBar(m_VioDev.shmem_bar));
+                info->Flags.has_resource_assign_uuid =
+                   virtio_is_feature_enabled(m_u64HostFeatures, VIRTIO_GPU_F_RESOURCE_UUID);
+                info->Flags.has_resource_blob =
+                   virtio_is_feature_enabled(m_u64HostFeatures, VIRTIO_GPU_F_RESOURCE_BLOB);
                 info->Flags.Reserved = 0;
                 info->SupportedCapsetIDs = m_supportedCapsetIDs;
                 return STATUS_SUCCESS;
@@ -538,38 +549,71 @@ NTSTATUS VioGpuAdapter::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO *pQ
 
                 DbgPrint(TRACE_LEVEL_ERROR, ("QUERY SEG\n"));
                 DXGK_QUERYSEGMENTOUT3 *pSegmentInfo = (DXGK_QUERYSEGMENTOUT3 *)pQueryAdapterInfo->pOutputData;
+                ULONGLONG shmem_len = m_VioDev.shmem_len;
+                CPciBar *shmem_bar = m_PciResources.GetPciBar(m_VioDev.shmem_bar);
+                const bool has_shmem = shmem_bar && shmem_len;
                 if (!pSegmentInfo[0].pSegmentDescriptor)
                 {
-                    pSegmentInfo->NbSegment = 1;
+                    pSegmentInfo->NbSegment = has_shmem ? 2 : 1;
                 }
                 else
                 {
+                    const UINT segment_count = has_shmem ? 2 : 1;
                     DXGK_SEGMENTDESCRIPTOR3 *pSegmentDesc = pSegmentInfo->pSegmentDescriptor;
-                    memset(&pSegmentDesc[0], 0, sizeof(pSegmentDesc[0]));
+                    memset(&pSegmentDesc[0], 0, sizeof(pSegmentDesc[0]) * segment_count);
 
                     pSegmentInfo->PagingBufferPrivateDataSize = 0;
 
+                    /* keep paging buffers in segment 1 */
                     pSegmentInfo->PagingBufferSegmentId = 1;
                     pSegmentInfo->PagingBufferSize = 10 * PAGE_SIZE;
 
-                    //
-                    // Fill out aperture segment descriptor
-                    //
-                    memset(&pSegmentDesc[0], 0, sizeof(pSegmentDesc[0]));
-
-                    pSegmentDesc[0].BaseAddress.QuadPart = 0xC0000000;
+                    /* Segment 1: framebuffer/aperture */
+                    ULONGLONG segment1_base = 0xC0000000;
+                    if (has_shmem)
+                    {
+                        ULONGLONG min_base = ALIGN_UP_BY(shmem_len, PAGE_SIZE);
+                        if (segment1_base < min_base)
+                        {
+                            segment1_base = min_base;
+                        }
+                    }
+                    pSegmentDesc[0].BaseAddress.QuadPart = segment1_base;
                     pSegmentDesc[0].Flags.Aperture = TRUE;
                     pSegmentDesc[0].Flags.CacheCoherent = TRUE;
-                    // pSegmentDesc[0].CpuTranslatedAddress.QuadPart = 0xFFFFFFFE00000000;
-
                     pSegmentDesc[0].Flags.CpuVisible = FALSE;
-
-                    // pSegmentDesc[0].Flags.DirectFlip = TRUE;
                     pSegmentDesc[0].Size = 256 * 1024 * 4096;
                     pSegmentDesc[0].CommitLimit = 256 * 1024 * 4096;
-
                     pSegmentDesc[0].Flags.DirectFlip = TRUE;
+
+                    if (has_shmem) 
+                    {
+                        //Segment 2: BAR-backed shared memory (CPU-visible)
+                        pSegmentDesc[1].BaseAddress.QuadPart = 0;
+
+                        pSegmentDesc[1].Flags.Aperture = TRUE;
+                        //pSegmentDesc[1].Flags.Aperture = FALSE;
+
+                        pSegmentDesc[1].Flags.CacheCoherent = FALSE;
+                        pSegmentDesc[1].Flags.CpuVisible = TRUE;
+                        pSegmentDesc[1].Flags.DirectFlip = FALSE;
+
+                        PHYSICAL_ADDRESS shmem_pa = shmem_bar->GetPA();
+                        shmem_pa.QuadPart += m_VioDev.shmem_offset;
+                        pSegmentDesc[1].CpuTranslatedAddress = shmem_pa;
+                        pSegmentDesc[1].Size = (SIZE_T)shmem_len;
+                        pSegmentDesc[1].CommitLimit = (SIZE_T)shmem_len;
+                    }
+
+                    for (UINT i=0; i<segment_count; i++) 
+                    {
+                        DbgPrint(TRACE_LEVEL_VERBOSE, ("%s pSegmentDesc[%d].BaseAddress=%llx\n", __FUNCTION__, i, pSegmentDesc[i].BaseAddress.QuadPart));
+                        DbgPrint(TRACE_LEVEL_VERBOSE, ("%s pSegmentDesc[%d].CpuTranslatedAddress=%llx\n", __FUNCTION__, i, pSegmentDesc[i].CpuTranslatedAddress.QuadPart));
+                        DbgPrint(TRACE_LEVEL_VERBOSE, ("%s pSegmentDesc[%d].Size=%zx\n", __FUNCTION__, i, pSegmentDesc[i].Size));
+                        DbgPrint(TRACE_LEVEL_VERBOSE, ("%s pSegmentDesc[%d].Flags: Aperture=%u CpuVisible=%u CacheCoherent=%u DirectFlip=%u\n", __FUNCTION__, i, pSegmentDesc[i].Flags.Aperture, pSegmentDesc[i].Flags.CpuVisible, pSegmentDesc[i].Flags.CacheCoherent, pSegmentDesc[i].Flags.DirectFlip));
+                    }
                 }
+                
                 DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s Requested segments\n", __FUNCTION__));
                 return STATUS_SUCCESS;
             }
@@ -1186,6 +1230,10 @@ NTSTATUS VioGpuAdapter::VioGpuAdapterInit()
     do
     {
         struct virtqueue *vqs[2];
+        if (!AckFeature(VIRTIO_GPU_F_RESOURCE_BLOB))
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("VIRTIO_GPU_F_RESOURCE_BLOB not supported by host\n"));
+        }
         if (!AckFeature(VIRTIO_F_VERSION_1))
         {
             status = STATUS_UNSUCCESSFUL;
