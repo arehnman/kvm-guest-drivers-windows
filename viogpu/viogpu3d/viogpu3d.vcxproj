@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Win10 Debug|ARM64">
@@ -44,7 +44,7 @@
     <ConfigurationType>Driver</ConfigurationType>
     <DriverType>WDM</DriverType>
     <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
-    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win10 Debug|Win32'" Label="Configuration">
     <TargetVersion>Windows10</TargetVersion>
@@ -53,7 +53,7 @@
     <ConfigurationType>Driver</ConfigurationType>
     <DriverType>WDM</DriverType>
     <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
-    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win10 Release|ARM64'" Label="Configuration">
     <TargetVersion>Windows10</TargetVersion>
@@ -62,7 +62,7 @@
     <ConfigurationType>Driver</ConfigurationType>
     <DriverType>WDM</DriverType>
     <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
-    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win10 Debug|ARM64'" Label="Configuration">
     <TargetVersion>Windows10</TargetVersion>
@@ -71,7 +71,7 @@
     <ConfigurationType>Driver</ConfigurationType>
     <DriverType>WDM</DriverType>
     <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
-    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win10 Release|x64'" Label="Configuration">
     <TargetVersion>Windows10</TargetVersion>
@@ -80,7 +80,7 @@
     <ConfigurationType>Driver</ConfigurationType>
     <DriverType>WDM</DriverType>
     <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
-    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win10 Debug|x64'" Label="Configuration">
     <TargetVersion>Windows10</TargetVersion>
@@ -89,10 +89,14 @@
     <ConfigurationType>Driver</ConfigurationType>
     <DriverType>WDM</DriverType>
     <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
-    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
   </PropertyGroup>
   <Import Project="$(MSBuildProjectDirectory)\viogpu3d.props" />
   <Import Project="$(MSBuildProjectDirectory)\..\..\build\Driver.Common.props" />
+  <!-- Override Driver.Common.props (Universal) to allow non-DCH registry writes -->
+  <PropertyGroup>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
+  </PropertyGroup>
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="PropertySheets">
@@ -278,6 +282,7 @@
     <ClInclude Include="trace.h" />
     <ClInclude Include="viogpu_allocation.h" />
     <ClInclude Include="viogpu_adapter.h" />
+    <ClInclude Include="viogpu_shmem_allocator.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="viogpu_vidpn.h" />
   </ItemGroup>
@@ -291,6 +296,7 @@
     <ClCompile Include="viogpu_device.cpp" />
     <ClCompile Include="viogpu_allocation.cpp" />
     <ClCompile Include="viogpu_adapter.cpp" />
+    <ClCompile Include="viogpu_shmem_allocator.cpp" />
     <ClCompile Include="..\common\baseobj.cpp" />
     <ClCompile Include="..\common\bitops.cpp" />
     <ClCompile Include="viogpu_vidpn.cpp" />
@@ -313,7 +319,35 @@
       <PackageRelativeDirectory>
       </PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\z-1.dll">
+    <FilesToPackage Include="$(MESA_PREFIX)\bin\libEGL.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX)\bin\libGLESv1_CM.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX)\bin\libGLESv2.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX)\bin\libvulkan_virtio.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX)\bin\opengl32.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX)\bin\vulkan_lvp.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(ProjectDir)icd\lvp_icd.x86_64.json">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(ProjectDir)icd\virtio_icd.x86_64.json">
       <PackageRelativeDirectory>
       </PackageRelativeDirectory>
     </FilesToPackage>
@@ -329,11 +363,22 @@
     <PackOne_Files Include="..\viogpusc\$(OutDir)vgpusrv.pdb" />
     <PackOne_Files Include="$(MESA_PREFIX)\bin\viogpu_d3d10.dll" />
     <PackOne_Files Include="$(MESA_PREFIX)\bin\viogpu_wgl.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\z-1.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX)\bin\libEGL.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX)\bin\libGLESv1_CM.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX)\bin\libGLESv2.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX)\bin\libvulkan_virtio.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX)\bin\opengl32.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX)\bin\vulkan_lvp.dll" />
+    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.x86_64.json" />
+    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.x86_64.json" />
   </ItemGroup>
   <ItemGroup>
     <Inf Include="viogpu3d.inx" />
   </ItemGroup>
+  <Target Name="UpdateVulkanIcdJsons" BeforeTargets="PrepareForBuild" Condition="'$(MESA_PREFIX)' != '' AND Exists('$(ProjectDir)tools\update_icd_jsons.ps1')">
+    <Message Text="Updating Vulkan ICD JSONs from $(MESA_PREFIX)" Importance="High" />
+    <Exec Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX)&quot;" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Condition="Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')" Project="$(MSBuildProjectDirectory)\..\..\build\Driver.Common.targets" />
   <ImportGroup Label="ExtensionTargets">
