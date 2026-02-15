@@ -1,4 +1,7 @@
 /*
+ * Copyright 2026 Ake Rehnman <ake.rehnman@gmail.com>
+ * SPDX-License-Identifier: MPL-2.0
+ * 
  * Copyright (C) 2019-2020 Red Hat, Inc.
  *
  * Written By: Vadim Rozenfeld <vrozenfe@redhat.com>
