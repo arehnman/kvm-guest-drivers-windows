@@ -58,6 +58,14 @@ typedef struct virtio_gpu_vbuffer
 
     bool auto_release;
 } GPU_VBUFFER, *PGPU_VBUFFER;
+
+typedef struct viogpu_complete_ctx
+{
+    PGPU_VBUFFER vbuf;
+    void (*user_cb)(void *ctx);
+    void *user_ctx;
+    void *owner;
+} VIOGPU_COMPLETE_CTX, *PVIOGPU_COMPLETE_CTX;
 // #pragma pack()
 
 #define MAX_INLINE_CMD_SIZE  96
@@ -249,7 +257,8 @@ class CtrlQueue : public VioGpuQueue
                                 UINT ctx_id,
                                 PGPU_MEM_ENTRY ents,
                                 UINT nents,
-                                ULONG *out_resp_type);
+                                void (*complete_cb)(void *),
+                                void *complete_ctx);
     BOOLEAN ResourceMapBlob(UINT res_id, ULONGLONG offset, ULONG *map_info);
     void ResourceUnmapBlob(UINT res_id);
     void DestroyResource(UINT id);

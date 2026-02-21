@@ -477,7 +477,8 @@ NTSTATUS CtrlQueue::CreateResourceBlob(UINT res_id,
                                        UINT ctx_id,
                                        PGPU_MEM_ENTRY ents,
                                        UINT nents,
-                                       ULONG *out_resp_type)
+                                       void (*complete_cb)(void *),
+                                       void *complete_ctx)
 {
     PAGED_CODE();
 
@@ -486,13 +487,6 @@ NTSTATUS CtrlQueue::CreateResourceBlob(UINT res_id,
     PGPU_RES_CREATE_BLOB cmd;
     PGPU_VBUFFER vbuf;
     PGPU_CTRL_HDR resp_buf;
-    KEVENT event;
-    NTSTATUS status = STATUS_UNSUCCESSFUL;
-
-    if (out_resp_type)
-    {
-        *out_resp_type = 0;
-    }
 
     cmd = (PGPU_RES_CREATE_BLOB)AllocCmdResp(&vbuf, sizeof(*cmd), NULL, sizeof(GPU_CTRL_HDR));
     if (!cmd || !vbuf)
@@ -526,62 +520,17 @@ NTSTATUS CtrlQueue::CreateResourceBlob(UINT res_id,
         vbuf->data_size = sizeof(*ents) * nents;
     }
 
-    KeInitializeEvent(&event, NotificationEvent, FALSE);
-    vbuf->complete_cb = NotifyEventCompleteCB;
-    vbuf->complete_ctx = &event;
-    vbuf->auto_release = false;
-
-    LARGE_INTEGER timeout = {0};
-    timeout.QuadPart = Int32x32To64(1000, -10000);
+    if (complete_cb) {
+        if (complete_ctx) {
+            PVIOGPU_COMPLETE_CTX ctx = (PVIOGPU_COMPLETE_CTX)complete_ctx;
+            ctx->vbuf = vbuf;
+        }
+        vbuf->complete_cb = complete_cb;
+        vbuf->complete_ctx = complete_ctx;
+    }
 
     QueueBufferFenced(vbuf);
-
-    status = KeWaitForSingleObject(&event, Executive, KernelMode, FALSE, &timeout);
-    if (status == STATUS_TIMEOUT)
-    {
-        DbgPrint(TRACE_LEVEL_FATAL, ("---> FATAL %s timed out res_id = 0x%x\n", __FUNCTION__, res_id));
-        VioGpuDbgBreak();
-        goto out;
-    }
-
-    if (out_resp_type)
-    {
-        *out_resp_type = resp_buf ? resp_buf->type : 0;
-    }
-
-    if (!resp_buf)
-    {
-        DbgPrint(TRACE_LEVEL_ERROR, ("---> %s ERROR resp_buf == NULL res_id = 0x%x\n", __FUNCTION__, res_id));
-        status = STATUS_UNSUCCESSFUL;
-        goto out;
-    }
-
-    if (resp_buf->type >= VIRTIO_GPU_RESP_ERR_UNSPEC)
-    {
-        DbgPrint(TRACE_LEVEL_ERROR,
-                 ("---> %s ERROR Command failed resp->type=0x%x pcmd->type=0x%x res_id = 0x%x\n",
-                  __FUNCTION__,
-                  resp_buf->type,
-                  cmd->hdr.type,
-                  res_id));
-        status = STATUS_UNSUCCESSFUL;
-        goto out;
-    }
-
-    if (resp_buf->type != VIRTIO_GPU_RESP_OK_NODATA)
-    {
-        DbgPrint(TRACE_LEVEL_ERROR, ("---> %s ERROR invalid response type 0x%x res_id = 0x%x\n", __FUNCTION__, resp_buf->type, res_id));
-        status = STATUS_UNSUCCESSFUL;
-        goto out;
-    }
-
-    status = STATUS_SUCCESS;
-
-out:
-    ReleaseBuffer(vbuf);
-
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id = 0x%x status = 0x%x\n", __FUNCTION__, res_id, status));
-    return status;
+    return STATUS_SUCCESS;
 }
 
 BOOLEAN CtrlQueue::ResourceMapBlob(UINT res_id, ULONGLONG offset, ULONG *map_info)
@@ -644,7 +593,6 @@ BOOLEAN CtrlQueue::ResourceMapBlob(UINT res_id, ULONGLONG offset, ULONG *map_inf
     ret = TRUE;
 
 out:
-    ReleaseBuffer(vbuf);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id = 0x%x\n", __FUNCTION__, res_id));
     return ret;
 }
@@ -1059,17 +1007,11 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
 UINT CtrlQueue::QueueBufferFenced(PGPU_VBUFFER vbuf)
 {
     UINT ret;
-    KIRQL SavedIrql;
-
-    KeAcquireSpinLock(&m_CtrlQueueSpinLock, &SavedIrql);
-
     PGPU_CTRL_HDR hdr = (PGPU_CTRL_HDR)vbuf->buf;
     hdr->fence_id = InterlockedIncrement(&m_FenceIdr);
     hdr->flags |= VIRTIO_GPU_FLAG_FENCE;
 
     ret = QueueBuffer(vbuf);
-
-    KeReleaseSpinLock(&m_CtrlQueueSpinLock, SavedIrql);
 
     return ret;
 }
