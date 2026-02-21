@@ -41,6 +41,20 @@
 #include "viogpudo.tmh"
 #endif
 
+typedef struct _VIOGPU_SUBMIT_ESCAPE_CTX
+{
+    void *cmd_buf;
+} VIOGPU_SUBMIT_ESCAPE_CTX, *PVIOGPU_SUBMIT_ESCAPE_CTX;
+
+static void SubmitEscapeCompleteCB(void *ctx)
+{
+    PVIOGPU_SUBMIT_ESCAPE_CTX submit_ctx = (PVIOGPU_SUBMIT_ESCAPE_CTX)ctx;
+    if (submit_ctx)
+    {
+        delete submit_ctx;
+    }
+}
+
 static UINT g_InstanceId = 0;
 
 struct NOTIFY_CONTEXT
@@ -859,6 +873,89 @@ NTSTATUS VioGpuAdapter::Escape(_In_ CONST DXGKARG_ESCAPE *pEscape)
                     return STATUS_INVALID_PARAMETER;
                 }
                 context->Init(&pVioGpuEscape->CtxInit);
+                break;
+            }
+        case VIOGPU_SUBMIT_CMD:
+            {
+                size = sizeof(VIOGPU_SUBMIT_CMD_REQ);
+                if (pVioGpuEscape->DataLength < size)
+                {
+                    DbgPrint(TRACE_LEVEL_ERROR,
+                             ("%s buffer too small %d, should be at least %d\n",
+                              __FUNCTION__,
+                              pVioGpuEscape->DataLength,
+                              size));
+                    return STATUS_INVALID_BUFFER_SIZE;
+                }
+
+                const UINT total_size = sizeof(VIOGPU_ESCAPE) + pVioGpuEscape->DataLength;
+                if (pEscape->PrivateDriverDataSize < total_size)
+                {
+                    DbgPrint(TRACE_LEVEL_ERROR,
+                             ("%s escape size too small %d, should be at least %d\n",
+                              __FUNCTION__,
+                              pEscape->PrivateDriverDataSize,
+                              total_size));
+                    return STATUS_INVALID_BUFFER_SIZE;
+                }
+
+                PUINT8 payload = (PUINT8)(pVioGpuEscape + 1);
+                VIOGPU_SUBMIT_CMD_REQ *req = (VIOGPU_SUBMIT_CMD_REQ *)payload;
+                const UINT needed = (UINT)(sizeof(*req) + req->CmdSize);
+                if (pVioGpuEscape->DataLength < needed)
+                {
+                    DbgPrint(TRACE_LEVEL_ERROR,
+                             ("%s escape payload too small %d, need %d\n",
+                              __FUNCTION__,
+                              pVioGpuEscape->DataLength,
+                              needed));
+                    return STATUS_INVALID_BUFFER_SIZE;
+                }
+
+                VioGpuDevice *device = reinterpret_cast<VioGpuDevice *>(pEscape->hDevice);
+                if (!device)
+                {
+                    DbgPrint(TRACE_LEVEL_ERROR, ("%s NULL device\n", __FUNCTION__));
+                    return STATUS_INVALID_PARAMETER;
+                }
+
+                if (req->CmdType == VIOGPU_CMD_SUBMIT)
+                {
+                    if (req->CmdSize == 0)
+                    {
+                        DbgPrint(TRACE_LEVEL_ERROR, ("%s invalid cmd_size=0\n", __FUNCTION__));
+                        return STATUS_INVALID_PARAMETER;
+                    }
+
+                    PUINT8 cmd_copy = new (NonPagedPoolNx) BYTE[req->CmdSize];
+                    if (!cmd_copy)
+                    {
+                        return STATUS_INSUFFICIENT_RESOURCES;
+                    }
+                    RtlCopyMemory(cmd_copy, payload + sizeof(*req), req->CmdSize);
+
+                    PVIOGPU_SUBMIT_ESCAPE_CTX submit_ctx =
+                        new (NonPagedPoolNx) VIOGPU_SUBMIT_ESCAPE_CTX();
+                    if (!submit_ctx)
+                    {
+                        delete[] cmd_copy;
+                        return STATUS_INSUFFICIENT_RESOURCES;
+                    }
+                    submit_ctx->cmd_buf = cmd_copy;
+
+                    ctrlQueue.SubmitCommand(cmd_copy,
+                                            req->CmdSize,
+                                            device->GetId(),
+                                            SubmitEscapeCompleteCB,
+                                            submit_ctx);
+                }
+                else
+                {
+                    DbgPrint(TRACE_LEVEL_ERROR,
+                             ("%s unsupported cmd_type=0x%x\n",
+                              __FUNCTION__, req->CmdType));
+                    return STATUS_INVALID_PARAMETER;
+                }
                 break;
             }
 

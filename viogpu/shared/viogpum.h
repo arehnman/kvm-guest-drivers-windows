@@ -73,6 +73,7 @@ typedef struct _VIOGPU_ADAPTERINFO
 #define VIOGPU_RES_UNMAP_BLOB        0x103
 
 #define VIOGPU_CTX_INIT              0x200
+#define VIOGPU_SUBMIT_CMD            0x300
 
 #pragma pack(1)
 typedef struct _VIOGPU_DISP_MODE
@@ -140,6 +141,15 @@ typedef struct _VIOGPU_CTX_INIT_REQ
 {
     UINT CapsetID;
 } VIOGPU_CTX_INIT_REQ;
+#pragma pack()
+
+#pragma pack(1)
+typedef struct _VIOGPU_SUBMIT_CMD_REQ
+{
+    D3DKMT_HANDLE hContext;
+    UINT CmdType;
+    UINT CmdSize;
+} VIOGPU_SUBMIT_CMD_REQ;
 #pragma pack()
 
 #pragma pack(1)
