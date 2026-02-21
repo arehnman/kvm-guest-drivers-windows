@@ -347,11 +347,16 @@ NTSTATUS VioGpuDevice::OpenAllocation(_In_ CONST DXGKARG_OPENALLOCATION *pOpenAl
             DbgPrint(TRACE_LEVEL_ERROR, ("%s failed to create device allocation\n", __FUNCTION__));
             goto fail;
         }
-        if (allocation->IsBlob() && !allocation->IsBlobCreated())
+
+        if (allocation->IsBlob())
         {
-            DbgPrint(TRACE_LEVEL_ERROR,
-                     ("%s blob create failed res_id=0x%x\n", __FUNCTION__, allocation->GetId()));
-            goto fail;
+            allocation->EnsureBlobCreated(GetId());
+            if (!allocation->IsBlobCreated() && !allocation->IsBlobPending())
+            {
+                DbgPrint(TRACE_LEVEL_ERROR,
+                         ("%s blob create failed res_id=0x%x\n", __FUNCTION__, allocation->GetId()));
+                goto fail;
+            }
         }
     }
 

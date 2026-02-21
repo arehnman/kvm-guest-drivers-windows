@@ -46,6 +46,39 @@ static void VioGpuGetTargetProcess(VioGpuDevice *device, PEPROCESS *out_process,
     }
 }
 
+void VioGpuAllocation::BlobCreateCompleteCB(void *ctx_void)
+{
+    PVIOGPU_COMPLETE_CTX ctx = (PVIOGPU_COMPLETE_CTX)ctx_void;
+    if (!ctx || !ctx->owner) {
+        return;
+    }
+
+    VioGpuAllocation *alloc = reinterpret_cast<VioGpuAllocation *>(ctx->owner);
+    PGPU_CTRL_HDR resp = ctx->vbuf ? (PGPU_CTRL_HDR)ctx->vbuf->resp_buf : NULL;
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+    if (resp && resp->type < VIRTIO_GPU_RESP_ERR_UNSPEC) {
+        status = STATUS_SUCCESS;
+    }
+
+    alloc->m_blob_create_status = status;
+    if (NT_SUCCESS(status)) {
+        alloc->m_blob_created = true;
+        alloc->m_resource_created = 1;
+        InterlockedExchange(&alloc->m_blob_create_state, 2);
+    } else {
+        alloc->m_blob_created = false;
+        InterlockedExchange(&alloc->m_blob_create_state, 0);
+    }
+
+    if (ctx->user_cb) {
+        ctx->user_cb(ctx->user_ctx);
+    }
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s res_id=0x%x\n", __FUNCTION__, alloc->GetId()));
+
+    delete ctx;
+}
+
 VioGpuAllocation::VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_CREATE_ALLOCATION_EXCHANGE *exchange)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -65,7 +98,7 @@ VioGpuAllocation::VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_CREATE_ALLOCAT
     m_blob_mapped = false;
     m_blob_created = false;
     m_blob_create_status = STATUS_PENDING;
-    m_blob_create_resp_type = 0;
+    m_blob_create_state = 0;
     ExInitializeFastMutex(&m_blob_map_mutex);
     InitializeListHead(&m_blob_map_list);
     m_blob_map_user_refs = 0;
@@ -74,7 +107,7 @@ VioGpuAllocation::VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_CREATE_ALLOCAT
     if (!m_is_blob)
     {
         m_adapter->ctrlQueue.CreateResource3D(m_Id, &exchange->ResourceOptions);
-        InterlockedExchange(&m_resource_created, 1);
+        m_resource_created = 1;
     }
 
     m_pMDL = NULL;
@@ -88,20 +121,33 @@ VioGpuAllocation::VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_CREATE_ALLOCAT
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id=%d\n", __FUNCTION__, m_Id));
 }
 
-void VioGpuAllocation::CreateBlobResource(UINT ctx_id)
+NTSTATUS VioGpuAllocation::CreateBlobResource(UINT ctx_id,
+                                              void (*complete_cb)(void *),
+                                              void *complete_ctx)
 {
-    if (m_blob_mem == VIRTIO_GPU_BLOB_MEM_GUEST)
-    {
-        DbgPrint(TRACE_LEVEL_WARNING,
-                 ("%s guest blob unsupported for venus; overriding blob_mem GUEST -> HOST3D res_id=0x%x\n",
-                  __FUNCTION__, m_Id));
-        m_blob_mem = VIRTIO_GPU_BLOB_MEM_HOST3D;
+    LONG prev_state = InterlockedCompareExchange(&m_blob_create_state, 1, 0);
+    if (prev_state == 1) {
+        return STATUS_PENDING;
+    }
+    if (prev_state == 2) {
+        return m_blob_created ? STATUS_SUCCESS : m_blob_create_status;
     }
 
-    ULONG resp_type = 0;
+    m_blob_create_status = STATUS_PENDING;
+
     NTSTATUS status = STATUS_UNSUCCESSFUL;
 
-    resp_type = 0;
+    PVIOGPU_COMPLETE_CTX ctx = new (NonPagedPoolNx) VIOGPU_COMPLETE_CTX();
+    if (!ctx) {
+        m_blob_create_status = status;
+        InterlockedExchange(&m_blob_create_state, 0);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    ctx->vbuf = NULL;
+    ctx->user_cb = complete_cb;
+    ctx->user_ctx = complete_ctx;
+    ctx->owner = this;
+
     status = m_adapter->ctrlQueue.CreateResourceBlob(m_Id,
                                                         m_blob_size,
                                                         m_blob_mem,
@@ -110,26 +156,16 @@ void VioGpuAllocation::CreateBlobResource(UINT ctx_id)
                                                         ctx_id,
                                                         nullptr,
                                                         0,
-                                                        &resp_type);
-    m_blob_create_status = status;
-    m_blob_create_resp_type = resp_type;
-
-    m_blob_created = NT_SUCCESS(status);
-
-    if (!m_blob_created)
-    {
-        DbgPrint(TRACE_LEVEL_ERROR,
-                 ("%s ERROR create_blob_status=0x%lx resp=0x%x res_id=0x%x\n",
-                  __FUNCTION__,
-                  status,
-                  resp_type,
-                  m_Id));
+                                                        VioGpuAllocation::BlobCreateCompleteCB,
+                                                        ctx);
+    if (!NT_SUCCESS(status)) {
+        m_blob_create_status = status;
+        InterlockedExchange(&m_blob_create_state, 0);
+        delete ctx;
+        return status;
     }
 
-    if (m_blob_created)
-    {
-        InterlockedExchange(&m_resource_created, 1);
-    }
+    return status;
 }
 
 void VioGpuAllocation::EnsureBlobCreated(ULONG ctx_id)
@@ -139,13 +175,9 @@ void VioGpuAllocation::EnsureBlobCreated(ULONG ctx_id)
         return;
     }
 
-    if (InterlockedCompareExchange(&m_resource_created, 1, 0) == 0)
+    if (!m_resource_created)
     {
         CreateBlobResource(ctx_id);
-        if (!m_blob_created)
-        {
-            InterlockedExchange(&m_resource_created, 0);
-        }
     }
 }
 
@@ -611,16 +643,11 @@ NTSTATUS VioGpuAllocation::EscapeResourceMapBlob(VIOGPU_RES_MAP_BLOB_REQ *resMap
     {
         return STATUS_NOT_SUPPORTED;
     }
-    if (!m_blob_created)
+    if (!m_blob_created && m_blob_create_state == 0)
     {
-        DbgPrint(TRACE_LEVEL_ERROR,
-                 ("%s ERROR create_blob_status=0x%lx resp=0x%x res_id=0x%x\n",
-                  __FUNCTION__,
-                  m_blob_create_status,
-                  m_blob_create_resp_type,
-                  m_Id));
         return STATUS_UNSUCCESSFUL;
     }
+
     const ULONGLONG requested_size = resMap->Size ? resMap->Size : m_blob_size;
     if (requested_size == 0 || requested_size > m_blob_size)
     {

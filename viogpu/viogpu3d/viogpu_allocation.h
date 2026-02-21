@@ -67,8 +67,15 @@ class VioGpuAllocation
     {
         return m_blob_created;
     }
+    bool IsBlobPending() const
+    {
+        return (m_blob_create_state == 1);
+    }
 
     void EnsureBlobCreated(ULONG ctx_id);
+    NTSTATUS CreateBlobResource(UINT ctx_id,
+                                void (*complete_cb)(void *) = NULL,
+                                void *complete_ctx = NULL);
 
     void AttachBacking(MDL *pMdl, size_t pageCount, size_t pageOffset);
     void DetachBacking();
@@ -88,6 +95,7 @@ class VioGpuAllocation
     NTSTATUS EscapeResourceUnmapBlob(VIOGPU_RES_UNMAP_BLOB_REQ *resUnmap, VioGpuDevice *device);
 
   private:
+    static void BlobCreateCompleteCB(void *ctx_void);
     struct BlobUserMapping
     {
         LIST_ENTRY ListEntry;
@@ -117,13 +125,11 @@ class VioGpuAllocation
     bool m_blob_mapped;
     bool m_blob_created;
     NTSTATUS m_blob_create_status;
-    ULONG m_blob_create_resp_type;
+    volatile LONG m_blob_create_state;
     FAST_MUTEX m_blob_map_mutex;
     LIST_ENTRY m_blob_map_list;
     ULONG m_blob_map_user_refs;
     volatile LONG m_resource_created;
-
-    void CreateBlobResource(UINT ctx_id);    
 
     MDL *m_pMDL;
     size_t m_pageCount;
