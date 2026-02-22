@@ -1044,11 +1044,12 @@ VOID VioGpuAdapter::DpcRoutine(VOID)
                               resp->ctx_id,
                               pcmd->type));
                 }
+                const bool auto_release = pvbuf->auto_release;
                 if (pvbuf->complete_cb != NULL)
                 {
                     pvbuf->complete_cb(pvbuf->complete_ctx);
                 }
-                if (pvbuf->auto_release)
+                if (auto_release)
                 {
                     ctrlQueue.ReleaseBuffer(pvbuf);
                 }
