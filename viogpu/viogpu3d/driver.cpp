@@ -899,12 +899,13 @@ VioGpu3DDdiControlInterrupt(_In_ CONST HANDLE hAdapter,
                             _In_ BOOLEAN EnableInterrupt)
 {
     PAGED_CODE();
+    VIOGPU_ASSERT_CHK(hAdapter != NULL);
+    VioGpuAdapter *pAdapter = reinterpret_cast<VioGpuAdapter *>(hAdapter);
 
-    UNREFERENCED_PARAMETER(hAdapter);
-    UNREFERENCED_PARAMETER(InterruptType);
-    UNREFERENCED_PARAMETER(EnableInterrupt);
-
-    DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s not implemented\n", __FUNCTION__));
+    if (InterruptType == DXGK_INTERRUPT_CRTC_VSYNC)
+    {
+        pAdapter->SetVsyncInterruptEnabled(EnableInterrupt);
+    }
     return STATUS_SUCCESS;
 };
 

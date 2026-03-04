@@ -105,7 +105,13 @@ class VioGpuVidPN
                             _In_ INT PositionY);
 
     void Flip();
-    static void FlipThread(void *ctx);
+    static void VsyncNotifyTimerDpc(KDPC *dpc, PVOID deferredContext, PVOID systemArg1, PVOID systemArg2);
+    PHYSICAL_ADDRESS GetCurrentSourceAddress() const
+    {
+        return m_sourceAddress;
+    }
+    
+    volatile LONG m_vsync = 0;
 
     NTSTATUS SetVidPnSourceAddress(const DXGKARG_SETVIDPNSOURCEADDRESS *pSetVidPnSourceAddress);
 
@@ -145,6 +151,10 @@ class VioGpuVidPN
     VioGpuAllocation *m_sourceRes = NULL;
     volatile LONG m_shouldFlip = 0;
 
-    PETHREAD m_pFlipThread;
+
     BOOL m_shouldFlipStop = false;
+    KTIMER m_vsyncNotifyTimer;
+    KDPC m_vsyncNotifyDpc;
+    ULONG m_timerRes = 0;
+    LARGE_INTEGER next_vsync_time = {0};
 };

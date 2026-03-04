@@ -283,6 +283,24 @@ void VioGpuAllocation::UnmarkBusy()
     ASSERT(m_busy >= 0);
 }
 
+void VioGpuAllocation::FlushToScreen(UINT scan_id)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s res_id=%d\n", __FUNCTION__, m_Id));
+
+    GPU_BOX box;
+    box.x = 0;
+    box.y = 0;
+    box.z = 0;
+    box.width = m_options.width;
+    box.height = m_options.height;
+    box.depth = 1;
+
+    m_adapter->ctrlQueue.SetScanout(scan_id, m_Id, m_options.width, m_options.height, 0, 0);
+    m_adapter->ctrlQueue.ResFlush(m_Id, m_options.width, m_options.height, 0, 0);
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id=%d\n", __FUNCTION__, m_Id));
+}
+
 PAGED_CODE_SEG_BEGIN
 
 D3DDDIFORMAT VioGpuToD3DDDIColorFormat(virtio_gpu_formats format)
@@ -302,26 +320,6 @@ D3DDDIFORMAT VioGpuToD3DDDIColorFormat(virtio_gpu_formats format)
     }
     DbgPrint(TRACE_LEVEL_ERROR, ("---> %s Unsupported color format %d\n", __FUNCTION__, format));
     return D3DDDIFMT_X8B8G8R8;
-}
-
-void VioGpuAllocation::FlushToScreen(UINT scan_id)
-{
-    PAGED_CODE();
-
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s res_id=%d\n", __FUNCTION__, m_Id));
-
-    GPU_BOX box;
-    box.x = 0;
-    box.y = 0;
-    box.z = 0;
-    box.width = m_options.width;
-    box.height = m_options.height;
-    box.depth = 1;
-
-    m_adapter->ctrlQueue.SetScanout(scan_id, m_Id, m_options.width, m_options.height, 0, 0);
-    m_adapter->ctrlQueue.ResFlush(m_Id, m_options.width, m_options.height, 0, 0);
-
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id=%d\n", __FUNCTION__, m_Id));
 }
 
 NTSTATUS VioGpuAllocation::GetStandardAllocationDriverData(DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA *pStandardAllocation)

@@ -11,6 +11,9 @@
 #include "edid.h"
 #include "trace.h"
 
+static const LONGLONG kVsyncPeriod100ns = 166666LL; // 60 Hz
+static const LONGLONG kVsyncMaxLead100ns = 333333LL;
+
 PAGED_CODE_SEG_BEGIN
 
 VioGpuVidPN::VioGpuVidPN(VioGpuAdapter *adapter)
@@ -115,14 +118,16 @@ NTSTATUS VioGpuVidPN::Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren)
     DbgPrint(TRACE_LEVEL_INFORMATION,
              ("<--- %s ColorFormat = %d\n", __FUNCTION__, m_CurrentModes[0].DispInfo.ColorFormat));
 
-    HANDLE threadHandle = 0;
     m_shouldFlipStop = false;
-    Status = PsCreateSystemThread(&threadHandle, (ACCESS_MASK)0, NULL, (HANDLE)0, NULL, VioGpuVidPN::FlipThread, this);
-
-    ObReferenceObjectByHandle(threadHandle, THREAD_ALL_ACCESS, NULL, KernelMode, (PVOID *)(&m_pFlipThread), NULL);
-
-    ZwClose(threadHandle);
-
+    KeInitializeTimerEx(&m_vsyncNotifyTimer, SynchronizationTimer);
+    KeInitializeDpc(&m_vsyncNotifyDpc, VioGpuVidPN::VsyncNotifyTimerDpc, this);
+    m_timerRes = ExSetTimerResolution(10000, TRUE);
+    {
+        LARGE_INTEGER now;
+        KeQuerySystemTime(&now);
+        next_vsync_time.QuadPart = now.QuadPart + kVsyncPeriod100ns;
+        KeSetTimerEx(&m_vsyncNotifyTimer, next_vsync_time, 0, &m_vsyncNotifyDpc);
+    }
     return Status;
 }
 
@@ -153,13 +158,14 @@ void VioGpuVidPN::ReleasePostDisplayOwnership(D3DDDI_VIDEO_PRESENT_TARGET_ID Tar
 
     m_shouldFlipStop = TRUE;
 
-    if (KeWaitForSingleObject(m_pFlipThread, Executive, KernelMode, FALSE, &timeout) == STATUS_TIMEOUT)
-    {
-        DbgPrint(TRACE_LEVEL_FATAL, ("---> Failed to exit the flip thread\n"));
-        VioGpuDbgBreak();
-    }
+    KeCancelTimer(&m_vsyncNotifyTimer);
+    KeFlushQueuedDpcs();
 
-    ObDereferenceObject(m_pFlipThread);
+    if (m_timerRes)
+    {
+        ExSetTimerResolution(m_timerRes, FALSE);
+        m_timerRes = 0;
+    }
 
     BlackOutScreen(&m_CurrentModes[SourceId]);
     DestroyFrameBufferObj(TRUE);
@@ -1966,10 +1972,16 @@ void VioGpuVidPN::SetCustomDisplay(_In_ USHORT xres, _In_ USHORT yres)
     SetVideoModeInfo(m_CustomModeIndex, &tmpModeInfo);
 }
 
+PAGED_CODE_SEG_END
+
+//
+// Non-Paged Code
+//
+#pragma code_seg(push)
+#pragma code_seg()
+
 void VioGpuVidPN::Flip()
 {
-    PAGED_CODE();
-
     if (InterlockedExchange(&m_shouldFlip, 0))
     {
         if (m_sourceAddress.QuadPart != 0 && m_sourceRes != NULL)
@@ -1981,40 +1993,42 @@ void VioGpuVidPN::Flip()
             m_pAdapter->ctrlQueue.SetScanout(0, 0, 0, 0, 0, 0);
         }
     }
-    DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt;
-    interrupt.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
-
-    interrupt.CrtcVsync.VidPnTargetId = 0;
-    interrupt.CrtcVsync.PhysicalAddress = m_sourceAddress;
-
-    m_pAdapter->NotifyInterrupt(&interrupt, true);
 }
 
-void VioGpuVidPN::FlipThread(void *ctx)
+void VioGpuVidPN::VsyncNotifyTimerDpc(KDPC *dpc, PVOID deferredContext, PVOID systemArg1, PVOID systemArg2)
 {
-    PAGED_CODE();
+    UNREFERENCED_PARAMETER(dpc);
+    UNREFERENCED_PARAMETER(systemArg1);
+    UNREFERENCED_PARAMETER(systemArg2);
 
-    VioGpuVidPN *vidpn = reinterpret_cast<VioGpuVidPN *>(ctx);
-    LARGE_INTEGER interval;
-    interval.QuadPart = -166666LL;
-    while (true)
+    VioGpuVidPN *vidpn = reinterpret_cast<VioGpuVidPN *>(deferredContext);
+    if (!vidpn || vidpn->m_shouldFlipStop)
     {
-        KeDelayExecutionThread(KernelMode, false, &interval);
-        if (vidpn->m_shouldFlipStop)
-        {
-            return;
-        }
-        vidpn->Flip();
+        return;
     }
+
+    LARGE_INTEGER now;
+    LARGE_INTEGER next;
+    KeQuerySystemTime(&now);
+
+    next.QuadPart = vidpn->next_vsync_time.QuadPart + kVsyncPeriod100ns;
+    if (next.QuadPart < now.QuadPart)
+    {
+        next.QuadPart = now.QuadPart + kVsyncPeriod100ns;
+    }
+    else if (next.QuadPart > (now.QuadPart + kVsyncMaxLead100ns))
+    {
+        next.QuadPart = now.QuadPart + kVsyncPeriod100ns;
+    }
+    vidpn->next_vsync_time = next;
+
+    vidpn->Flip();
+    InterlockedExchange(&vidpn->m_vsync, 1);
+    vidpn->m_pAdapter->ctrlQueue.SubmitCommand(NULL, 0, 0, NULL, NULL);
+
+    KeSetTimerEx(&vidpn->m_vsyncNotifyTimer, next, 0, &vidpn->m_vsyncNotifyDpc);
 }
 
-PAGED_CODE_SEG_END
-
-//
-// Non-Paged Code
-//
-#pragma code_seg(push)
-#pragma code_seg()
 
 NTSTATUS VioGpuVidPN::SetVidPnSourceAddress(const DXGKARG_SETVIDPNSOURCEADDRESS *pSetVidPnSourceAddress)
 {

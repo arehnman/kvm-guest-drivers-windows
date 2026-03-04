@@ -108,6 +108,8 @@ class VioGpuAdapter : IVioGpuPCI
     VioGpuMemSegment m_CursorSegment;
 
     ULONG m_Id;
+    volatile LONG m_VsyncInterruptEnabled;
+
     CAPSET_INFO m_capsetInfos[VIRTIO_GPU_MAX_CAPSET_ID + 1];
 
   public:
@@ -192,6 +194,14 @@ class VioGpuAdapter : IVioGpuPCI
         return &m_DxgkInterface;
     }
     NTSTATUS NotifyInterrupt(DXGKARGCB_NOTIFY_INTERRUPT_DATA *interruptData, BOOL triggerDpc);
+    void SetVsyncInterruptEnabled(BOOLEAN enabled)
+    {
+        InterlockedExchange((PLONG)&m_VsyncInterruptEnabled, enabled ? 1 : 0);
+    }
+    BOOLEAN IsVsyncInterruptEnabled() const
+    {
+        return m_VsyncInterruptEnabled != 0;
+    }
 
     CPciResources *GetPciResources(void)
     {

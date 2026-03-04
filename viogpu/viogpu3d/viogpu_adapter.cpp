@@ -118,7 +118,7 @@ VioGpuAdapter::VioGpuAdapter(_In_ DEVICE_OBJECT *pPhysicalDeviceObject)
     RtlZeroMemory(&m_DxgkInterface, sizeof(m_DxgkInterface));
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
     RtlZeroMemory(&m_PointerShape, sizeof(m_PointerShape));
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    m_VsyncInterruptEnabled = 1;
 
     RtlZeroMemory(&m_VioDev, sizeof(m_VioDev));
     m_Id = g_InstanceId++;
@@ -131,6 +131,8 @@ VioGpuAdapter::VioGpuAdapter(_In_ DEVICE_OBJECT *pPhysicalDeviceObject)
     m_ResolutionEventHandle = NULL;
     m_u32NumCapsets = 0;
     m_u32NumScanouts = 0;
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
 VioGpuAdapter::~VioGpuAdapter(void)
@@ -1807,6 +1809,18 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
 
     if (serviced)
     {
+        if (IsVsyncInterruptEnabled())
+        {
+            if (InterlockedExchange(&vidpn.m_vsync, 0))
+            {
+                DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};
+                interrupt.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
+                interrupt.CrtcVsync.VidPnTargetId = 0;
+                interrupt.CrtcVsync.PhysicalAddress = vidpn.GetCurrentSourceAddress();
+                m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
+            }
+        }
+
         InterlockedOr((PLONG)&m_PendingWorks, intReason);
         m_DxgkInterface.DxgkCbQueueDpc(m_DxgkInterface.DeviceHandle);
     }

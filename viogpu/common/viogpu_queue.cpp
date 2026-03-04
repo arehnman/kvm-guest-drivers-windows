@@ -658,10 +658,10 @@ void CtrlQueue::DestroyCtx(UINT ctx_id)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+PAGED_CODE_SEG_END
+
 void CtrlQueue::ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y)
 {
-    PAGED_CODE();
-
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     PGPU_RES_FLUSH cmd;
     PGPU_VBUFFER vbuf;
@@ -679,6 +679,8 @@ void CtrlQueue::ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y)
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
+
+PAGED_CODE_SEG_BEGIN
 
 void CtrlQueue::TransferToHost2D(UINT res_id, ULONG offset, UINT width, UINT height, UINT x, UINT y)
 {
