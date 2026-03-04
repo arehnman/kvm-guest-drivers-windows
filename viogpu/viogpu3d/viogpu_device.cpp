@@ -184,20 +184,22 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
               pPresent->Flags.Rotate ? "Rotate" : ""));
 
     VioGpuCommand *cmd = new (NonPagedPoolNx) VioGpuCommand(m_pAdapter);
-    if (pPresent->pDmaBuffer)
+    if (pPresent->pDmaBufferPrivateData)
     {
         VioGpuCommand **privateData = (VioGpuCommand **)pPresent->pDmaBufferPrivateData;
         *privateData = cmd;
     }
 
-    cmd->SetDmaBuf((char *)pPresent->pDmaBuffer);
+    if (pPresent->pDmaBuffer)
+    {
+        cmd->SetDmaBuf((char *)pPresent->pDmaBuffer);
+    }
 
     DXGK_ALLOCATIONLIST *dxgk_src = &pPresent->pAllocationList[DXGK_PRESENT_SOURCE_INDEX];
     DXGK_ALLOCATIONLIST *dxgk_dst = &pPresent->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX];
 
     VioGpuAllocation *src = NULL;
     VioGpuAllocation *dst = NULL;
-    ;
 
     if (dxgk_src->hDeviceSpecificAllocation != NULL)
     {
@@ -215,7 +217,7 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
         }
     }
 
-    if (dxgk_dst != NULL)
+    if (dxgk_dst != NULL && dxgk_dst->hDeviceSpecificAllocation != NULL)
     {
         dst = reinterpret_cast<VioGpuDeviceAllocation *>(dxgk_dst->hDeviceSpecificAllocation)->GetAllocation();
         if (pPresent->pDmaBuffer)
