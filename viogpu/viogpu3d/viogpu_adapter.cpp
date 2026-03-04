@@ -64,28 +64,45 @@ struct NOTIFY_CONTEXT
     BOOL triggerDpc;
 };
 
-BOOLEAN NotifyRoutine(PVOID ctx_void)
+typedef struct _CTRLQUEUE_SYNCEXEC_CONTEXT
 {
-    // DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s\n", __FUNCTION__));
-    NOTIFY_CONTEXT *ctx = (NOTIFY_CONTEXT *)ctx_void;
-    DXGKRNL_INTERFACE *pDxgkInterface = ctx->pDxgkInterface;
-    pDxgkInterface->DxgkCbNotifyInterrupt(pDxgkInterface->DeviceHandle, ctx->interrupt);
-    if (ctx->triggerDpc)
-    {
-        pDxgkInterface->DxgkCbQueueDpc(pDxgkInterface->DeviceHandle);
-    }
+    VIOGPU_SYNC_EXEC_ROUTINE routine;
+    void *routineCtx;
+    BOOLEAN routineRet;
+} CTRLQUEUE_SYNCEXEC_CONTEXT, *PCTRLQUEUE_SYNCEXEC_CONTEXT;
 
+static BOOLEAN CtrlQueueSyncExecRoutine(PVOID ctxVoid)
+{
+    PCTRLQUEUE_SYNCEXEC_CONTEXT ctx = (PCTRLQUEUE_SYNCEXEC_CONTEXT)ctxVoid;
+    ctx->routineRet = ctx->routine ? ctx->routine(ctx->routineCtx) : FALSE;
     return TRUE;
 }
 
-NTSTATUS VioGpuAdapter::NotifyInterrupt(DXGKARGCB_NOTIFY_INTERRUPT_DATA *interruptData, BOOL triggerDpc)
+BOOLEAN VioGpuAdapter::ExecuteSynchronized(VIOGPU_SYNC_EXEC_ROUTINE routine, void *routineCtx)
 {
-    NOTIFY_CONTEXT notify;
-    notify.pDxgkInterface = &m_DxgkInterface;
-    notify.interrupt = interruptData;
-    notify.triggerDpc = triggerDpc;
-    BOOLEAN bRet;
-    return m_DxgkInterface.DxgkCbSynchronizeExecution(m_DxgkInterface.DeviceHandle, NotifyRoutine, &notify, 0, &bRet);
+    if (!routine)
+    {
+        return FALSE;
+    }
+
+    CTRLQUEUE_SYNCEXEC_CONTEXT syncCtx = {};
+    syncCtx.routine = routine;
+    syncCtx.routineCtx = routineCtx;
+    syncCtx.routineRet = FALSE;
+
+    BOOLEAN callbackRet = FALSE;
+    const ULONG messageNumber = m_PciResources.IsMSIEnabled() ? 1 : 0;
+    NTSTATUS status = m_DxgkInterface.DxgkCbSynchronizeExecution(m_DxgkInterface.DeviceHandle,
+                                                                  CtrlQueueSyncExecRoutine,
+                                                                  &syncCtx,
+                                                                  messageNumber,
+                                                                  &callbackRet);
+    if (!NT_SUCCESS(status) || !callbackRet)
+    {
+        return FALSE;
+    }
+
+    return syncCtx.routineRet;
 }
 
 virtio_gpu_formats ColorFormat(UINT format)
@@ -119,6 +136,8 @@ VioGpuAdapter::VioGpuAdapter(_In_ DEVICE_OBJECT *pPhysicalDeviceObject)
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
     RtlZeroMemory(&m_PointerShape, sizeof(m_PointerShape));
     m_VsyncInterruptEnabled = 1;
+    KeInitializeSpinLock(&m_ctrlStageListLock);
+    InitializeListHead(&m_ctrlStageReadyList);
 
     RtlZeroMemory(&m_VioDev, sizeof(m_VioDev));
     m_Id = g_InstanceId++;
@@ -1003,6 +1022,73 @@ PAGED_CODE_SEG_END
 #pragma code_seg(push)
 #pragma code_seg()
 
+VOID VioGpuAdapter::CtrlStagePushFromIsr(PGPU_VBUFFER buf, UINT len)
+{
+    buf->isr_stage_len = len;
+    ExInterlockedInsertTailList(&m_ctrlStageReadyList, &buf->isr_stage_entry, &m_ctrlStageListLock);
+}
+
+BOOLEAN VioGpuAdapter::CtrlStagePopForDpc(PGPU_VBUFFER *buf, UINT *len)
+{
+    PLIST_ENTRY entryList = ExInterlockedRemoveHeadList(&m_ctrlStageReadyList, &m_ctrlStageListLock);
+    if (entryList == NULL)
+    {
+        return FALSE;
+    }
+
+    PGPU_VBUFFER stagedBuf = CONTAINING_RECORD(entryList, GPU_VBUFFER, isr_stage_entry);
+    *buf = stagedBuf;
+    *len = stagedBuf->isr_stage_len;
+    stagedBuf->isr_stage_len = 0;
+    return TRUE;
+}
+
+VOID VioGpuAdapter::ProcessCtrlQueueBuffer(PGPU_VBUFFER pvbuf, UINT len)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s ctrlQueue pvbuf = %p len = %d\n", __FUNCTION__, pvbuf, len));
+
+    PGPU_CTRL_HDR pcmd = (PGPU_CTRL_HDR)pvbuf->buf;
+    PGPU_CTRL_HDR resp = (PGPU_CTRL_HDR)pvbuf->resp_buf;
+
+    if (resp == NULL)
+    {
+        DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed resp_buf == NULL\n"));
+    }
+    else if (resp->type >= VIRTIO_GPU_RESP_ERR_UNSPEC)
+    {
+        DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed resp->type=%x pcmd->type=%x\n", resp->type, pcmd->type));
+    }
+    else if (resp->type == VIRTIO_GPU_RESP_OK_NODATA)
+    {
+        DbgPrint(TRACE_LEVEL_INFORMATION,
+                 ("<--- %s fence_id=%llu cmd_type=%lu\n",
+                  __FUNCTION__,
+                  (ULONGLONG)resp->fence_id,
+                  pcmd->type));
+    }
+    else
+    {
+        DbgPrint(TRACE_LEVEL_VERBOSE,
+                 ("<--- %s type = %xlu flags = %lx fence_id = %llx ctx_id = %lx cmd_type = %lx\n",
+                  __FUNCTION__,
+                  resp->type,
+                  resp->flags,
+                  resp->fence_id,
+                  resp->ctx_id,
+                  pcmd->type));
+    }
+
+    const bool auto_release = pvbuf->auto_release;
+    if (pvbuf->complete_cb != NULL)
+    {
+        pvbuf->complete_cb(pvbuf->complete_ctx);
+    }
+    if (auto_release)
+    {
+        ctrlQueue.ReleaseBuffer(pvbuf);
+    }
+}
+
 VOID VioGpuAdapter::DpcRoutine(VOID)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -1013,49 +1099,10 @@ VOID VioGpuAdapter::DpcRoutine(VOID)
     {
         if ((reason & ISR_REASON_DISPLAY))
         {
-            while ((pvbuf = ctrlQueue.DequeueBuffer(&len)) != NULL)
+            while (CtrlStagePopForDpc(&pvbuf, &len))
             {
-                DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s ctrlQueue pvbuf = %p len = %d\n", __FUNCTION__, pvbuf, len));
-                PGPU_CTRL_HDR pcmd = (PGPU_CTRL_HDR)pvbuf->buf;
-                PGPU_CTRL_HDR resp = (PGPU_CTRL_HDR)pvbuf->resp_buf;
-
-                if (resp == NULL)
-                {
-                    DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed resp_buf == NULL\n"));
-                } else
-                if (resp->type >= VIRTIO_GPU_RESP_ERR_UNSPEC)
-                {
-                    DbgPrint(TRACE_LEVEL_FATAL, ("!!!!! Command failed resp->type=%x pcmd->type=%x\n", resp->type, pcmd->type));
-                } else
-                if (resp->type == VIRTIO_GPU_RESP_OK_NODATA)
-                {
-                    DbgPrint(TRACE_LEVEL_INFORMATION,
-                             ("<--- %s fence_id=%llu cmd_type=%lu\n",
-                              __FUNCTION__,
-                              (ULONGLONG)resp->fence_id,
-                              pcmd->type));
-                } else
-                if (resp->type != VIRTIO_GPU_RESP_OK_NODATA)
-                {
-                    DbgPrint(TRACE_LEVEL_VERBOSE,
-                             ("<--- %s type = %xlu flags = %lx fence_id = %llx ctx_id = %lx cmd_type = %lx\n",
-                              __FUNCTION__,
-                              resp->type,
-                              resp->flags,
-                              resp->fence_id,
-                              resp->ctx_id,
-                              pcmd->type));
-                }
-                const bool auto_release = pvbuf->auto_release;
-                if (pvbuf->complete_cb != NULL)
-                {
-                    pvbuf->complete_cb(pvbuf->complete_ctx);
-                }
-                if (auto_release)
-                {
-                    ctrlQueue.ReleaseBuffer(pvbuf);
-                }
-            };
+                ProcessCtrlQueueBuffer(pvbuf, len);
+            }
         }
         if ((reason & ISR_REASON_CURSOR))
         {
@@ -1071,6 +1118,9 @@ VOID VioGpuAdapter::DpcRoutine(VOID)
             DbgPrint(TRACE_LEVEL_FATAL, ("---> %s ConfigChanged\n", __FUNCTION__));
             KeSetEvent(&m_ConfigUpdateEvent, IO_NO_INCREMENT, FALSE);
         }
+    	// QueueBuffer() waits on m_CtrlQueueEvent when the ctrl queue is full.
+	// In ISR-staging mode, dequeue happens in ISR, so wake waiters here in DPC.
+	ctrlQueue.SignalQueueSpace();
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 
@@ -1380,6 +1430,8 @@ NTSTATUS VioGpuAdapter::VioGpuAdapterInit()
             VioGpuDbgBreak();
             break;
         }
+
+        ctrlQueue.SetSynchronizeExecution(this);
 
         virtio_get_config(&m_VioDev,
                           FIELD_OFFSET(GPU_CONFIG, num_scanouts),
@@ -1809,6 +1861,33 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
 
     if (serviced)
     {
+        if (intReason & ISR_REASON_DISPLAY)
+        {
+            UINT len = 0;
+            PGPU_VBUFFER pvbuf = NULL;
+
+            while ((pvbuf = ctrlQueue.DequeueBufferFromIsr(&len)) != NULL)
+            {
+                if (pvbuf->complete_cb == VioGpuCommand::RunningCbDone && pvbuf->complete_ctx != NULL)
+                {
+                    VioGpuCommand *cmd = reinterpret_cast<VioGpuCommand *>(pvbuf->complete_ctx);
+                    UINT fenceId = 0;
+                    UINT nodeOrdinal = 0;
+                    UINT engineOrdinal = 0;
+                    if (cmd->OnPacketCompletedFromIsr(&fenceId, &nodeOrdinal, &engineOrdinal))
+                    {
+                        DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};
+                        interrupt.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
+                        interrupt.DmaCompleted.SubmissionFenceId = fenceId;
+                        interrupt.DmaCompleted.NodeOrdinal = nodeOrdinal;
+                        interrupt.DmaCompleted.EngineOrdinal = engineOrdinal;
+                        m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
+                    }
+                }
+
+                CtrlStagePushFromIsr(pvbuf, len);
+            }
+        }
         if (IsVsyncInterruptEnabled())
         {
             if (InterlockedExchange(&vidpn.m_vsync, 0))
@@ -1820,7 +1899,6 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
                 m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
             }
         }
-
         InterlockedOr((PLONG)&m_PendingWorks, intReason);
         m_DxgkInterface.DxgkCbQueueDpc(m_DxgkInterface.DeviceHandle);
     }

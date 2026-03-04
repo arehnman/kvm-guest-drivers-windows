@@ -52,6 +52,8 @@ typedef struct virtio_gpu_vbuffer
     char *resp_buf;
     int resp_size;
     LIST_ENTRY list_entry;
+    LIST_ENTRY isr_stage_entry;
+    UINT isr_stage_len;
 
     void (*complete_cb)(void *ctx);
     void *complete_ctx;
@@ -67,6 +69,15 @@ typedef struct viogpu_complete_ctx
     void *owner;
 } VIOGPU_COMPLETE_CTX, *PVIOGPU_COMPLETE_CTX;
 // #pragma pack()
+
+typedef BOOLEAN (*VIOGPU_SYNC_EXEC_ROUTINE)(void *ctx);
+
+class IVioGpuQueueSync
+{
+  public:
+    virtual ~IVioGpuQueueSync() {}
+    virtual BOOLEAN ExecuteSynchronized(VIOGPU_SYNC_EXEC_ROUTINE routine, void *routineCtx) = 0;
+};
 
 #define MAX_INLINE_CMD_SIZE  96
 #define MAX_INLINE_RESP_SIZE 24
@@ -245,6 +256,15 @@ class CtrlQueue : public VioGpuQueue
 
     UINT QueueBufferFenced(PGPU_VBUFFER vbuf);
     PGPU_VBUFFER DequeueBuffer(_Out_ UINT *len);
+    PGPU_VBUFFER DequeueBufferFromIsr(_Out_ UINT *len);
+    void SetSynchronizeExecution(IVioGpuQueueSync *syncExec)
+    {
+        m_SyncExec = syncExec;
+    }
+    void SignalQueueSpace()
+    {
+        KeSetEvent(&m_CtrlQueueEvent, IO_NO_INCREMENT, FALSE);
+    }
 
     void CreateResource(UINT res_id, UINT format, UINT width, UINT height);
     void CreateResource3D(UINT res_id, VIOGPU_RESOURCE_OPTIONS *options);
@@ -290,11 +310,17 @@ class CtrlQueue : public VioGpuQueue
     void DestroyCtx(UINT ctx_id);
 
   private:
+    UINT AddBufferSerialized(VirtIOBufferDescriptor *sg,
+                             UINT outcnt,
+                             UINT incnt,
+                             PGPU_VBUFFER buf,
+                             BOOLEAN kickOnSuccess);
     UINT QueueBuffer(PGPU_VBUFFER buf);
 
     volatile LONG m_FenceIdr;
     KEVENT m_CtrlQueueEvent;
     KSPIN_LOCK m_CtrlQueueSpinLock;
+    IVioGpuQueueSync *m_SyncExec = NULL;
 };
 
 class CrsrQueue : public VioGpuQueue

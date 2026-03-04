@@ -21,6 +21,8 @@ VioGpuCommand::VioGpuCommand(VioGpuAdapter *adapter)
     m_pContext = NULL;
 
     m_FenceId = 0;
+    m_NodeOrdinal = 0;
+    m_EngineOrdinal = 0;
     m_pDmaBuffer = NULL;
     m_pCommand = NULL;
     m_pEnd = NULL;
@@ -34,6 +36,12 @@ void VioGpuCommand::PrepareSubmit(const DXGKARG_SUBMITCOMMAND *pSubmitCommand)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s", __FUNCTION__));
 
     m_FenceId = pSubmitCommand->SubmissionFenceId;
+    m_EngineOrdinal = pSubmitCommand->EngineOrdinal;
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WIN8)
+    m_NodeOrdinal = pSubmitCommand->NodeOrdinal;
+#else
+    m_NodeOrdinal = 0;
+#endif
     if (m_pDmaBuffer)
     {
         m_pCommand = (char *)m_pDmaBuffer + pSubmitCommand->DmaBufferSubmissionStartOffset;
@@ -48,27 +56,44 @@ void VioGpuCommand::Run()
 
     InterlockedIncrement(&m_done);
 
-    if (m_pCommand == 0)
-{
-        DbgPrint(TRACE_LEVEL_WARNING, ("%s cmd=%p WARNING m_pCommand == 0\n", __FUNCTION__, this));
-        InterlockedIncrement(&m_done);
-
-        m_pAdapter->ctrlQueue.SubmitCommand(0,
-                                            0,
-                                            m_pContext->GetId(),
-                                            VioGpuCommand::RunningCbDone,
-                                            this);        
+    if (!m_pCommand || !m_pEnd || m_pCommand >= m_pEnd)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING, ("%s cmd=%p WARNING empty dma buffer\n", __FUNCTION__, this));
+        if (m_pContext)
+        {
+            InterlockedIncrement(&m_isrPendingPackets);
+            InterlockedIncrement(&m_done);
+            m_pAdapter->ctrlQueue.SubmitCommand(0,
+                                                0,
+                                                m_pContext->GetId(),
+                                                VioGpuCommand::RunningCbDone,
+                                                this);
+        }
+        VioGpuCommand::VioGpuCommandDone();
+        return;
     }
 
     while (m_pCommand < m_pEnd)
     {
-
+        if (m_pCommand + sizeof(VIOGPU_COMMAND_HDR) > m_pEnd)
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s fence_id=%u truncated command header: cmd=%p end=%p\n",
+                      __FUNCTION__, m_FenceId, m_pCommand, m_pEnd));
+            break;
+        }
         VIOGPU_COMMAND_HDR *cmdHdr = (VIOGPU_COMMAND_HDR *)m_pCommand;
         m_pCommand += sizeof(VIOGPU_COMMAND_HDR);
 
         void *cmdBody = m_pCommand;
+        if (m_pCommand + cmdHdr->size > m_pEnd)
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s fence_id=%u invalid command size=%u cmd=%p end=%p\n",
+                      __FUNCTION__, m_FenceId, cmdHdr->size, m_pCommand, m_pEnd));
+            break;
+        }
         m_pCommand += cmdHdr->size;
-
         DbgPrint(TRACE_LEVEL_VERBOSE, ("%s fence_id=%d running command=%d", __FUNCTION__, m_FenceId, cmdHdr->type));
 
         switch (cmdHdr->type)
@@ -76,6 +101,7 @@ void VioGpuCommand::Run()
             case VIOGPU_CMD_NOP:
             case VIOGPU_CMD_SUBMIT:
                 {
+                    InterlockedIncrement(&m_isrPendingPackets);
                     InterlockedIncrement(&m_done);
 
                     PBYTE submitCmd = new (NonPagedPoolNx) BYTE[cmdHdr->size];
@@ -92,6 +118,7 @@ void VioGpuCommand::Run()
             case VIOGPU_CMD_TRANSFER_TO_HOST:
             case VIOGPU_CMD_TRANSFER_FROM_HOST:
                 {
+                    InterlockedIncrement(&m_isrPendingPackets);
                     InterlockedIncrement(&m_done);
 
                     VIOGPU_TRANSFER_CMD *transferCmd = (VIOGPU_TRANSFER_CMD *)cmdBody;
@@ -106,6 +133,9 @@ void VioGpuCommand::Run()
 
             default:
                 {
+                    DbgPrint(TRACE_LEVEL_WARNING,
+                             ("%s fence_id=%u unsupported command type=%u size=%u\n",
+                              __FUNCTION__, m_FenceId, cmdHdr->type, cmdHdr->size));
                     ASSERT(0);
                     break;
                 }
@@ -113,7 +143,7 @@ void VioGpuCommand::Run()
     }
 
     VioGpuCommand::VioGpuCommandDone();
-            }
+}
 
 #pragma code_seg(pop)
 PAGED_CODE_SEG_BEGIN
@@ -150,6 +180,41 @@ void VioGpuCommand::RunningCbDone(void *cmd)
     ((VioGpuCommand *)cmd)->VioGpuCommandDone();
 }
 
+BOOLEAN VioGpuCommand::OnPacketCompletedFromIsr(UINT *fenceId, UINT *nodeOrdinal, UINT *engineOrdinal)
+{
+    LONG pending = InterlockedDecrement(&m_isrPendingPackets);
+    if (pending > 0)
+    {
+        return FALSE;
+    }
+
+    if (pending < 0)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s cmd=%p WARNING m_isrPendingPackets underflow fence_id=%u\n",
+                  __FUNCTION__,
+                  this,
+                  m_FenceId));
+        InterlockedExchange(&m_isrPendingPackets, 0);
+        return FALSE;
+    }
+
+    if (fenceId)
+    {
+        *fenceId = m_FenceId;
+    }
+    if (nodeOrdinal)
+    {
+        *nodeOrdinal = m_NodeOrdinal;
+    }
+    if (engineOrdinal)
+    {
+        *engineOrdinal = m_EngineOrdinal;
+    }
+
+    return TRUE;
+}
+
 void VioGpuCommand::VioGpuCommandDone()
 {
     if (InterlockedDecrement(&m_done))
@@ -171,12 +236,7 @@ void VioGpuCommand::VioGpuCommandDone()
         delete m_allocations;
     }
 
-    DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt;
-    interrupt.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
-    interrupt.DmaCompleted.SubmissionFenceId = m_FenceId;
-    interrupt.DmaCompleted.NodeOrdinal = 0;
-    interrupt.DmaCompleted.EngineOrdinal = 0;
-    m_pAdapter->NotifyInterrupt(&interrupt, true);
+    // DMA completion notify happens from ISR during ctrl queue staging.
 
     delete this;
 }

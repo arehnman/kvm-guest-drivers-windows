@@ -63,7 +63,7 @@ struct CAPSET_INFO
 
 virtio_gpu_formats ColorFormat(UINT format);
 
-class VioGpuAdapter : IVioGpuPCI
+class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
 {
   public:
     VioGpuCommander commander;
@@ -110,6 +110,8 @@ class VioGpuAdapter : IVioGpuPCI
     ULONG m_Id;
     volatile LONG m_VsyncInterruptEnabled;
 
+    LIST_ENTRY m_ctrlStageReadyList;
+    KSPIN_LOCK m_ctrlStageListLock;
     CAPSET_INFO m_capsetInfos[VIRTIO_GPU_MAX_CAPSET_ID + 1];
 
   public:
@@ -232,6 +234,7 @@ class VioGpuAdapter : IVioGpuPCI
     }
 
   private:
+    BOOLEAN ExecuteSynchronized(VIOGPU_SYNC_EXEC_ROUTINE routine, void *routineCtx) override;
     BOOLEAN CheckHardware();
     NTSTATUS WriteRegistryString(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR pszwValueName, _In_ PCSTR pszValue);
     NTSTATUS WriteRegistryDWORD(_In_ HANDLE DevInstRegKeyHandle, _In_ PCWSTR pszwValueName, _In_ PDWORD pdwValue);
@@ -268,6 +271,9 @@ class VioGpuAdapter : IVioGpuPCI
                            CURRENT_MODE *pCurrentMode);
     BOOLEAN InterruptRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface, _In_ ULONG MessageNumber);
     VOID DpcRoutine(_In_ PDXGKRNL_INTERFACE pDxgkInterface);
+    VOID CtrlStagePushFromIsr(PGPU_VBUFFER buf, UINT len);
+    BOOLEAN CtrlStagePopForDpc(PGPU_VBUFFER *buf, UINT *len);
+    VOID ProcessCtrlQueueBuffer(PGPU_VBUFFER pvbuf, UINT len);
 
     UINT64 RequestParameter(ULONG parmeter);
 };

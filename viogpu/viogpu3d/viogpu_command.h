@@ -34,6 +34,22 @@ class VioGpuCommand
 
     void AttachAllocations(DXGK_ALLOCATIONLIST *allocationList, UINT allocationListLength);
 
+    UINT GetSubmissionFenceId() const
+    {
+        return m_FenceId;
+    }
+
+    UINT GetNodeOrdinal() const
+    {
+        return m_NodeOrdinal;
+    }
+
+    UINT GetEngineOrdinal() const
+    {
+        return m_EngineOrdinal;
+    }
+
+    BOOLEAN OnPacketCompletedFromIsr(UINT *fenceId, UINT *nodeOrdinal, UINT *engineOrdinal);
 
   private:
     VioGpuAdapter *m_pAdapter;
@@ -41,11 +57,14 @@ class VioGpuCommand
     VioGpuDevice *m_pContext;
 
     UINT m_FenceId;
+    UINT m_NodeOrdinal;
+    UINT m_EngineOrdinal;
 
     char *m_pDmaBuffer;
     char *m_pCommand;
     char *m_pEnd;
     LONG m_done = 0;
+    LONG m_isrPendingPackets = 0;
 
     VioGpuAllocation **m_allocations;
     UINT m_allocationsLength;

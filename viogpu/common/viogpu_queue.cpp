@@ -928,6 +928,68 @@ void CtrlQueue::SetScanout(UINT scan_id, UINT res_id, UINT width, UINT height, U
 }
 
 #define SGLIST_SIZE 256
+
+typedef struct _CTRLQUEUE_SYNC_ADD_CTX
+{
+    CtrlQueue *queue;
+    VirtIOBufferDescriptor *sg;
+    UINT outcnt;
+    UINT incnt;
+    PGPU_VBUFFER buf;
+    BOOLEAN kickOnSuccess;
+    UINT ret;
+} CTRLQUEUE_SYNC_ADD_CTX, *PCTRLQUEUE_SYNC_ADD_CTX;
+
+static BOOLEAN CtrlQueueSyncAddRoutine(void *ctxVoid)
+{
+    PCTRLQUEUE_SYNC_ADD_CTX ctx = (PCTRLQUEUE_SYNC_ADD_CTX)ctxVoid;
+    ctx->ret = ctx->queue->AddBuf(ctx->sg, ctx->outcnt, ctx->incnt, ctx->buf, NULL, 0);
+    if (ctx->kickOnSuccess && ctx->ret == 0)
+    {
+        ctx->queue->Kick();
+    }
+    return TRUE;
+}
+
+UINT CtrlQueue::AddBufferSerialized(VirtIOBufferDescriptor *sg,
+                                    UINT outcnt,
+                                    UINT incnt,
+                                    PGPU_VBUFFER buf,
+                                    BOOLEAN kickOnSuccess)
+{
+    // viogpu3d installs a queue sync provider so add/get are serialized with ISR.
+    // viogpudo does not, so keep the local lock fallback for compatibility.
+    if (m_SyncExec)
+    {
+        CTRLQUEUE_SYNC_ADD_CTX syncCtx = {};
+        syncCtx.queue = this;
+        syncCtx.sg = sg;
+        syncCtx.outcnt = outcnt;
+        syncCtx.incnt = incnt;
+        syncCtx.buf = buf;
+        syncCtx.kickOnSuccess = kickOnSuccess;
+        syncCtx.ret = (UINT)-1;
+
+        if (!m_SyncExec->ExecuteSynchronized(CtrlQueueSyncAddRoutine, &syncCtx))
+        {
+            return (UINT)-1;
+        }
+
+        return syncCtx.ret;
+    }
+
+    KIRQL SavedIrql;
+    UINT ret = 0;
+    Lock(&SavedIrql);
+    ret = AddBuf(sg, outcnt, incnt, buf, NULL, 0);
+    if (kickOnSuccess && ret == 0)
+    {
+        Kick();
+    }
+    Unlock(SavedIrql);
+    return ret;
+}
+
 UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -936,7 +998,6 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
     UINT sgleft = SGLIST_SIZE;
     UINT outcnt = 0, incnt = 0;
     UINT ret = 0;
-    KIRQL SavedIrql;
 
     if (buf->size > PAGE_SIZE)
     {
@@ -990,12 +1051,14 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
 
     do
     {
-        Lock(&SavedIrql);
-        ret = AddBuf(&sg[0], outcnt, incnt, buf, NULL, 0);
-        Kick();
-        Unlock(SavedIrql);
+        ret = AddBufferSerialized(&sg[0], outcnt, incnt, buf, TRUE);
         if (ret == 0)
         {
+            break;
+        }
+        if (ret == (UINT)-1)
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s synchronize-execution add failed\n", __FUNCTION__));
             break;
         }
         KeWaitForSingleObject(&m_CtrlQueueEvent, Executive, KernelMode, FALSE, NULL);
@@ -1035,6 +1098,17 @@ PGPU_VBUFFER CtrlQueue::DequeueBuffer(_Out_ UINT *len)
     KeSetEvent(&m_CtrlQueueEvent, IO_NO_INCREMENT, FALSE);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+
+    return buf;
+}
+
+PGPU_VBUFFER CtrlQueue::DequeueBufferFromIsr(_Out_ UINT *len)
+{
+    PGPU_VBUFFER buf = (PGPU_VBUFFER)GetBuf(len);
+    if (buf == NULL)
+    {
+        *len = 0;
+    }
 
     return buf;
 }
