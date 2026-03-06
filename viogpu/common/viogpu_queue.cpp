@@ -315,7 +315,7 @@ BOOLEAN CtrlQueue::AskCapsetInfo(PGPU_VBUFFER *buf, ULONG idx)
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     PGPU_CMD_GET_CASPSET_INFO cmd;
-    PGPU_VBUFFER vbuf;
+    PGPU_VBUFFER vbuf = NULL;
     PGPU_RESP_CAPSET_INFO resp_buf;
     KEVENT event;
     NTSTATUS status;
@@ -325,6 +325,10 @@ BOOLEAN CtrlQueue::AskCapsetInfo(PGPU_VBUFFER *buf, ULONG idx)
     if (!resp_buf)
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("---> %s Failed allocate %d bytes\n", __FUNCTION__, sizeof(GPU_RESP_CAPSET_INFO)));
+        if (buf)
+        {
+            *buf = NULL;
+        }
         return FALSE;
     }
     cmd = (PGPU_CMD_GET_CASPSET_INFO)AllocCmdResp(&vbuf,
@@ -353,6 +357,11 @@ BOOLEAN CtrlQueue::AskCapsetInfo(PGPU_VBUFFER *buf, ULONG idx)
     {
         DbgPrint(TRACE_LEVEL_FATAL, ("---> Failed to get capset info\n"));
         VioGpuDbgBreak();
+        ReleaseBuffer(vbuf);
+        if (buf)
+        {
+            *buf = NULL;
+        }
         return FALSE;
     }
 
@@ -370,7 +379,7 @@ BOOLEAN CtrlQueue::AskCapset(PGPU_VBUFFER *buf, ULONG capset_id, ULONG capset_si
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     PGPU_CMD_GET_CASPSET cmd;
-    PGPU_VBUFFER vbuf;
+    PGPU_VBUFFER vbuf = NULL;
     PGPU_RESP_CAPSET resp_buf;
     KEVENT event;
     NTSTATUS status;
@@ -381,6 +390,10 @@ BOOLEAN CtrlQueue::AskCapset(PGPU_VBUFFER *buf, ULONG capset_id, ULONG capset_si
     if (!resp_buf)
     {
         DbgPrint(TRACE_LEVEL_ERROR, ("---> %s Failed allocate %d bytes\n", __FUNCTION__, sizeof(GPU_RESP_CAPSET_INFO)));
+        if (buf)
+        {
+            *buf = NULL;
+        }
         return FALSE;
     }
     cmd = (PGPU_CMD_GET_CASPSET)AllocCmdResp(&vbuf, sizeof(GPU_CMD_GET_CAPSET), resp_buf, resp_size);
@@ -406,6 +419,11 @@ BOOLEAN CtrlQueue::AskCapset(PGPU_VBUFFER *buf, ULONG capset_id, ULONG capset_si
     {
         DbgPrint(TRACE_LEVEL_FATAL, ("---> Failed to get capset\n"));
         VioGpuDbgBreak();
+        ReleaseBuffer(vbuf);
+        if (buf)
+        {
+            *buf = NULL;
+        }
         return FALSE;
     }
 
@@ -593,6 +611,10 @@ BOOLEAN CtrlQueue::ResourceMapBlob(UINT res_id, ULONGLONG offset, ULONG *map_inf
     ret = TRUE;
 
 out:
+    if (vbuf && status != STATUS_TIMEOUT)
+    {
+        ReleaseBuffer(vbuf);
+    }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s res_id = 0x%x\n", __FUNCTION__, res_id));
     return ret;
 }
@@ -1173,7 +1195,12 @@ void VioGpuBuf::Close(void)
                 pvbuf->resp_size = 0;
             }
 
-            ASSERT(pvbuf->data_buf == NULL && pvbuf->data_size == 0);
+            if (pvbuf->data_buf)
+            {
+                delete[] reinterpret_cast<PBYTE>(pvbuf->data_buf);
+                pvbuf->data_buf = NULL;
+                pvbuf->data_size = 0;
+            }
 
             delete[] reinterpret_cast<PBYTE>(pvbuf);
             --m_uCount;
@@ -1195,7 +1222,7 @@ void VioGpuBuf::Close(void)
                 pbuf->resp_size = 0;
             }
 
-            if (pbuf->data_buf && pbuf->data_size)
+            if (pbuf->data_buf)
             {
                 delete[] reinterpret_cast<PBYTE>(pbuf->data_buf);
                 pbuf->data_buf = NULL;
@@ -1312,7 +1339,7 @@ void VioGpuBuf::FreeBuf(_In_ PGPU_VBUFFER pbuf)
         pbuf->resp_size = 0;
     }
 
-    if (pbuf->data_buf && pbuf->data_size)
+    if (pbuf->data_buf)
     {
         delete[] reinterpret_cast<PBYTE>(pbuf->data_buf);
         pbuf->data_buf = NULL;
