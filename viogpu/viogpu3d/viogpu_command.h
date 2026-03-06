@@ -37,7 +37,7 @@ class VioGpuCommand
         m_pPrivateDataSlot = slot;
     }
 
-    void AttachAllocations(DXGK_ALLOCATIONLIST *allocationList, UINT allocationListLength);
+    NTSTATUS AttachAllocations(DXGK_ALLOCATIONLIST *allocationList, UINT allocationListLength);
 
     UINT GetSubmissionFenceId() const
     {

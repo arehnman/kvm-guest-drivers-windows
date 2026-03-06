@@ -320,7 +320,21 @@ NTSTATUS VioGpuDevice::Render(DXGKARG_RENDER *pRender)
         cmd->SetPrivateDataSlot(privateData);
     }
     cmd->SetDmaBuf(pDmaBufStart);
-    cmd->AttachAllocations(pRender->pAllocationList, pRender->AllocationListSize);
+    NTSTATUS attachStatus = cmd->AttachAllocations(pRender->pAllocationList, pRender->AllocationListSize);
+    if (!NT_SUCCESS(attachStatus))
+    {
+        if (pRender->pDmaBufferPrivateData)
+        {
+            VioGpuCommand **privateData = (VioGpuCommand **)pRender->pDmaBufferPrivateData;
+            if (*privateData == cmd)
+            {
+                *privateData = NULL;
+            }
+        }
+        cmd->SetPrivateDataSlot(NULL);
+        delete cmd;
+        return attachStatus;
+    }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 

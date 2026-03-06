@@ -104,8 +104,25 @@ void VioGpuCommand::Run()
                     InterlockedIncrement(&m_isrPendingPackets);
                     InterlockedIncrement(&m_done);
 
-                    PBYTE submitCmd = new (NonPagedPoolNx) BYTE[cmdHdr->size];
-                    RtlCopyMemory(submitCmd, cmdBody, cmdHdr->size);
+                    PBYTE submitCmd = NULL;
+                    if (cmdHdr->size > 0)
+                    {
+                        submitCmd = new (NonPagedPoolNx) BYTE[cmdHdr->size];
+                        if (!submitCmd)
+                        {
+                            DbgPrint(TRACE_LEVEL_FATAL,
+                                     ("%s fence_id=%u OOM allocating submit buffer (size=%u) -> bugcheck\n",
+                                      __FUNCTION__,
+                                      m_FenceId,
+                                      cmdHdr->size));
+                            KeBugCheckEx(0x000000E2,
+                                         static_cast<ULONG_PTR>('OIVg'),
+                                         static_cast<ULONG_PTR>(m_FenceId),
+                                         static_cast<ULONG_PTR>(cmdHdr->size),
+                                         reinterpret_cast<ULONG_PTR>(this));
+                        }
+                        RtlCopyMemory(submitCmd, cmdBody, cmdHdr->size);
+                    }
 
                     m_pAdapter->ctrlQueue.SubmitCommand(submitCmd,
                                                         cmdHdr->size,
@@ -148,12 +165,34 @@ void VioGpuCommand::Run()
 #pragma code_seg(pop)
 PAGED_CODE_SEG_BEGIN
 
-void VioGpuCommand::AttachAllocations(DXGK_ALLOCATIONLIST *allocationList, UINT allocationListLength)
+NTSTATUS VioGpuCommand::AttachAllocations(DXGK_ALLOCATIONLIST *allocationList, UINT allocationListLength)
 {
     PAGED_CODE();
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s", __FUNCTION__));
 
+    if (allocationListLength == 0)
+    {
+        m_allocations = NULL;
+        m_allocationsLength = 0;
+        return STATUS_SUCCESS;
+    }
+
+    if (!allocationList)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
     m_allocations = new (NonPagedPoolNx) VioGpuAllocation *[allocationListLength];
+    if (!m_allocations)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR,
+                 ("%s failed to allocate allocation array (count=%u)\n",
+                  __FUNCTION__,
+                  allocationListLength));
+        m_allocationsLength = 0;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
     m_allocationsLength = allocationListLength;
     for (UINT i = 0; i < allocationListLength; i++)
     {
@@ -168,6 +207,8 @@ void VioGpuCommand::AttachAllocations(DXGK_ALLOCATIONLIST *allocationList, UINT 
             m_allocations[i] = NULL;
         }
     }
+
+    return STATUS_SUCCESS;
 }
 
 PAGED_CODE_SEG_END
