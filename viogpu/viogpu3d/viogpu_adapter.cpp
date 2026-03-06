@@ -1633,6 +1633,7 @@ NTSTATUS VioGpuAdapter::HWInit(PCM_RESOURCE_LIST pResList)
             ULONG capset_id = resp->capset_id;
             if (capset_id > 63 || capset_id <= 0)
             {
+                ctrlQueue.ReleaseBuffer(vbuf);
                 continue; // Invalid capset id, capsets ids are in range from 1 to 63 per specification
             }
             m_capsetInfos[capset_id].id = capset_id;
@@ -1645,6 +1646,7 @@ NTSTATUS VioGpuAdapter::HWInit(PCM_RESOURCE_LIST pResList)
                       capset_id,
                       resp->capset_max_size,
                       resp->capset_max_version));
+            ctrlQueue.ReleaseBuffer(vbuf);
         }
 
     } while (0);

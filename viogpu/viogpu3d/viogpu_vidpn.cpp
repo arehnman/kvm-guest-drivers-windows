@@ -1764,11 +1764,15 @@ BOOLEAN VioGpuVidPN::GetEdids(void)
 
     for (UINT32 i = 0; i < m_pAdapter->m_u32NumScanouts; i++)
     {
+        vbuf = NULL;
         if (m_pAdapter->ctrlQueue.AskEdidInfo(&vbuf, i) && m_pAdapter->ctrlQueue.GetEdidInfo(vbuf, i, m_EDIDs[i]))
         {
             m_bEDID = TRUE;
         }
-        m_pAdapter->ctrlQueue.ReleaseBuffer(vbuf);
+        if (vbuf)
+        {
+            m_pAdapter->ctrlQueue.ReleaseBuffer(vbuf);
+        }
     }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));

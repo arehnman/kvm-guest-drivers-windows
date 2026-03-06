@@ -233,7 +233,7 @@ void VioGpuCommand::VioGpuCommandDone()
                 m_allocations[i]->UnmarkBusy();
             }
         }
-        delete m_allocations;
+        delete[] m_allocations;
     }
 
     // DMA completion notify happens from ISR during ctrl queue staging.
