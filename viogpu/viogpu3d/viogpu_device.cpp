@@ -188,6 +188,7 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
     {
         VioGpuCommand **privateData = (VioGpuCommand **)pPresent->pDmaBufferPrivateData;
         *privateData = cmd;
+        cmd->SetPrivateDataSlot(privateData);
     }
 
     if (pPresent->pDmaBuffer)
@@ -312,10 +313,11 @@ NTSTATUS VioGpuDevice::Render(DXGKARG_RENDER *pRender)
     }
 
     VioGpuCommand *cmd = new (NonPagedPoolNx) VioGpuCommand(m_pAdapter);
-    if (pRender->pDmaBuffer)
+    if (pRender->pDmaBufferPrivateData)
     {
         VioGpuCommand **privateData = (VioGpuCommand **)pRender->pDmaBufferPrivateData;
         *privateData = cmd;
+        cmd->SetPrivateDataSlot(privateData);
     }
     cmd->SetDmaBuf(pDmaBufStart);
     cmd->AttachAllocations(pRender->pAllocationList, pRender->AllocationListSize);

@@ -238,6 +238,12 @@ void VioGpuCommand::VioGpuCommandDone()
 
     // DMA completion notify happens from ISR during ctrl queue staging.
 
+    if (m_pPrivateDataSlot)
+    {
+        InterlockedCompareExchangePointer((PVOID volatile *)m_pPrivateDataSlot, NULL, this);
+        m_pPrivateDataSlot = NULL;
+    }
+
     delete this;
 }
 

@@ -32,6 +32,11 @@ class VioGpuCommand
         m_pDmaBuffer = pDmaBuffer;
     }
 
+    void SetPrivateDataSlot(VioGpuCommand **slot)
+    {
+        m_pPrivateDataSlot = slot;
+    }
+
     void AttachAllocations(DXGK_ALLOCATIONLIST *allocationList, UINT allocationListLength);
 
     UINT GetSubmissionFenceId() const
@@ -65,6 +70,7 @@ class VioGpuCommand
     char *m_pEnd;
     LONG m_done = 0;
     LONG m_isrPendingPackets = 0;
+    VioGpuCommand **m_pPrivateDataSlot = NULL;
 
     VioGpuAllocation **m_allocations;
     UINT m_allocationsLength;
