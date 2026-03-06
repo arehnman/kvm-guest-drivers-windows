@@ -487,8 +487,9 @@ NTSTATUS VioGpuAllocation::DxgkCreateAllocation(VioGpuAdapter *adapter, DXGKARG_
 
     if (pCreateAllocation->Flags.Resource)
     {
-        VioGpuResource *resource = new (NonPagedPoolNx) VioGpuResource();
-        pCreateAllocation->hResource = resource;
+        // This driver does not keep separate resource state.
+        // Reuse the allocation handle as the resource token.
+        pCreateAllocation->hResource = reinterpret_cast<HANDLE>(allocation);
     }
 
     allocationInfo->Alignment = 0;

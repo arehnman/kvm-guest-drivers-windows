@@ -500,14 +500,8 @@ VioGpu3DDestroyAllocation(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_DESTROY
         }
     }
 
-    if (pDestroyAllocation->Flags.DestroyResource)
-    {
-        VioGpuResource *resource = reinterpret_cast<VioGpuResource *>(pDestroyAllocation->hResource);
-        if (resource != NULL)
-        {
-            delete resource;
-        }
-    }
+    // No standalone VioGpuResource allocation exists. hResource aliases allocation state.
+    // Resource cleanup is covered by per-allocation deletes above.
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s \n", __FUNCTION__));
     return STATUS_SUCCESS;
