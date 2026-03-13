@@ -1741,10 +1741,10 @@ PBYTE VioGpuVidPN::GetCTA861Data(void)
     PAGED_CODE();
     if (m_bEDID)
     {
-        PEDID_DATA_V1 edid_data = (PEDID_DATA_V1)m_EDIDs;
-        if (edid_data->ExtensionFlag)
+        PEDID_DATA_V1 edid_data = (PEDID_DATA_V1)m_EDIDs[0];
+        if (edid_data->ExtensionFlag[0] > 0)
         {
-            PEDID_CTA_861 cta_data = (PEDID_CTA_861)(m_EDIDs + EDID_V1_BLOCK_SIZE);
+            PEDID_CTA_861 cta_data = (PEDID_CTA_861)(m_EDIDs[0] + EDID_V1_BLOCK_SIZE);
             if (cta_data->ExtentionTag[0] >= 2 && cta_data->Revision[0] >= 3)
             {
                 return (PBYTE)cta_data;
