@@ -1999,6 +1999,40 @@ void VioGpuVidPN::Flip()
     }
 }
 
+BOOLEAN VioGpuVidPN::QueueSourceAddress(PHYSICAL_ADDRESS address)
+{
+    LONG head = InterlockedCompareExchange(&m_sourceAddressQueueHead, 0, 0);
+    LONG tail = InterlockedCompareExchange(&m_sourceAddressQueueTail, 0, 0);
+    if ((tail - head) >= kSourceAddressQueueSize)
+    {
+        return FALSE;
+    }
+
+    LONG slot = tail & (kSourceAddressQueueSize-1);
+    m_sourceAddressQueue[slot] = address;
+    m_lastQueuedSourceAddress = address;
+    KeMemoryBarrier();
+    InterlockedExchange(&m_sourceAddressQueueTail, tail + 1);
+    return TRUE;
+}
+
+BOOLEAN VioGpuVidPN::DequeueSourceAddress(PHYSICAL_ADDRESS *address)
+{
+    LONG head = InterlockedCompareExchange(&m_sourceAddressQueueHead, 0, 0);
+    LONG tail = InterlockedCompareExchange(&m_sourceAddressQueueTail, 0, 0);
+    if (head == tail)
+    {
+        *address = m_sourceAddress;
+        return TRUE;
+    }
+
+    LONG slot = head & (kSourceAddressQueueSize-1);
+    *address = m_sourceAddressQueue[slot];
+    KeMemoryBarrier();
+    InterlockedExchange(&m_sourceAddressQueueHead, head + 1);
+    return TRUE;
+}
+
 void VioGpuVidPN::VsyncNotifyTimerDpc(KDPC *dpc, PVOID deferredContext, PVOID systemArg1, PVOID systemArg2)
 {
     UNREFERENCED_PARAMETER(dpc);
@@ -2028,7 +2062,8 @@ void VioGpuVidPN::VsyncNotifyTimerDpc(KDPC *dpc, PVOID deferredContext, PVOID sy
 
     vidpn->Flip();
     InterlockedExchange(&vidpn->m_vsync, 1);
-    vidpn->m_pAdapter->ctrlQueue.SubmitCommand(NULL, 0, 0, NULL, NULL);
+    // submit a NOP to trigger the ISR generate CRTC_VSYNC
+    vidpn->m_pAdapter->ctrlQueue.SubmitNop(NULL, NULL, FALSE);
 
     KeSetTimerEx(&vidpn->m_vsyncNotifyTimer, next, 0, &vidpn->m_vsyncNotifyDpc);
 }
@@ -2038,6 +2073,20 @@ NTSTATUS VioGpuVidPN::SetVidPnSourceAddress(const DXGKARG_SETVIDPNSOURCEADDRESS 
 {
     m_sourceAddress = pSetVidPnSourceAddress->PrimaryAddress;
     m_sourceRes = reinterpret_cast<VioGpuAllocation *>(pSetVidPnSourceAddress->hAllocation);
+    if (!QueueSourceAddress(m_sourceAddress))
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s source queue full source=0x%llx alloc=%p last_queued=0x%llx\n",
+                  __FUNCTION__,
+                  m_sourceAddress.QuadPart,
+                  m_sourceRes,
+                  m_lastQueuedSourceAddress.QuadPart));
+    }
+    DbgPrint(TRACE_LEVEL_VERBOSE,
+             ("%s source=0x%llx alloc=%p\n",
+              __FUNCTION__,
+              m_sourceAddress.QuadPart,
+              m_sourceRes));
     InterlockedOr(&m_shouldFlip, 1);
 
     return STATUS_SUCCESS;

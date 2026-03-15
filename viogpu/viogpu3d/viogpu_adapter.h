@@ -195,7 +195,7 @@ class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
     {
         return &m_DxgkInterface;
     }
-    NTSTATUS NotifyInterrupt(DXGKARGCB_NOTIFY_INTERRUPT_DATA *interruptData, BOOL triggerDpc);
+
     void SetVsyncInterruptEnabled(BOOLEAN enabled)
     {
         InterlockedExchange((PLONG)&m_VsyncInterruptEnabled, enabled ? 1 : 0);

@@ -110,6 +110,8 @@ class VioGpuVidPN
     {
         return m_sourceAddress;
     }
+    BOOLEAN QueueSourceAddress(PHYSICAL_ADDRESS address);
+    BOOLEAN DequeueSourceAddress(PHYSICAL_ADDRESS *address);
     
     volatile LONG m_vsync = 0;
 
@@ -157,4 +159,10 @@ class VioGpuVidPN
     KDPC m_vsyncNotifyDpc;
     ULONG m_timerRes = 0;
     LARGE_INTEGER next_vsync_time = {0};
+    /* kSourceAddressQueueSize must be power of 2 */
+    static const LONG kSourceAddressQueueSize = 16;
+    PHYSICAL_ADDRESS m_sourceAddressQueue[kSourceAddressQueueSize] = {};
+    volatile LONG m_sourceAddressQueueHead = 0;
+    volatile LONG m_sourceAddressQueueTail = 0;
+    PHYSICAL_ADDRESS m_lastQueuedSourceAddress = {0};
 };

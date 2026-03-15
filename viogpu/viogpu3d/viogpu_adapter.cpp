@@ -1892,12 +1892,26 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
         }
         if (IsVsyncInterruptEnabled())
         {
-            if (InterlockedExchange(&vidpn.m_vsync, 0))
+            LARGE_INTEGER freq;
+            LARGE_INTEGER now = KeQueryPerformanceCounter(&freq);
+            static LARGE_INTEGER last;
+            static LARGE_INTEGER mininterval;
+
+            if (mininterval.QuadPart == 0)
             {
+                mininterval.QuadPart = freq.QuadPart / 80;
+            }
+
+            if ((InterlockedExchange(&vidpn.m_vsync, 0)) &&
+                ((now.QuadPart - last.QuadPart) > mininterval.QuadPart))
+            {
+                last = now;
+                PHYSICAL_ADDRESS sourceAddress = {};
+                vidpn.DequeueSourceAddress(&sourceAddress);
                 DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};
                 interrupt.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
                 interrupt.CrtcVsync.VidPnTargetId = 0;
-                interrupt.CrtcVsync.PhysicalAddress = vidpn.GetCurrentSourceAddress();
+                interrupt.CrtcVsync.PhysicalAddress = sourceAddress;
                 m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
             }
         }
