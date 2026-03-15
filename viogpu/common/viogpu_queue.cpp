@@ -821,6 +821,31 @@ void CtrlQueue::SubmitCommand(void *cmdbuf, ULONG size, ULONG ctx_id, void (*com
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
+UINT CtrlQueue::SubmitNop(void (*complete_cb)(void *), void *complete_ctx, BOOLEAN blocking)
+{
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    PGPU_CMD_SUBMIT cmd;
+    PGPU_VBUFFER vbuf;
+    cmd = (PGPU_CMD_SUBMIT)AllocCmd(&vbuf, sizeof(*cmd));
+    RtlZeroMemory(cmd, sizeof(*cmd));
+
+    cmd->hdr.type = VIRTIO_GPU_CMD_SUBMIT_3D;
+
+    vbuf->complete_cb = complete_cb;
+    vbuf->complete_ctx = complete_ctx;
+
+    UINT ret = QueueBuffer(vbuf, blocking);
+    if (ret)
+    {
+        ReleaseBuffer(vbuf);
+    }
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return ret;
+}
+
+
 void CtrlQueue::TransferHostCmd(bool to_host,
                                 ULONG ctx_id,
                                 VIOGPU_TRANSFER_CMD *options,
@@ -1012,7 +1037,7 @@ UINT CtrlQueue::AddBufferSerialized(VirtIOBufferDescriptor *sg,
     return ret;
 }
 
-UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
+UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -1083,7 +1108,18 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
             DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s synchronize-execution add failed\n", __FUNCTION__));
             break;
         }
-        KeWaitForSingleObject(&m_CtrlQueueEvent, Executive, KernelMode, FALSE, NULL);
+        if (!blocking)
+        {
+            break;
+        }
+        LARGE_INTEGER t;
+        t.QuadPart = -10000LL;
+        NTSTATUS status = STATUS_SUCCESS;
+        while (status == STATUS_SUCCESS) {
+            status = KeWaitForSingleObject(&m_CtrlQueueEvent, Executive, KernelMode, FALSE, &t);
+            if (status == STATUS_TIMEOUT)
+                DbgPrint(TRACE_LEVEL_VERBOSE, ("Waiting in QueueBuffer\n"));
+        }
     } while (ret);
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s ret = %d\n", __FUNCTION__, ret));
