@@ -352,6 +352,48 @@
       </PackageRelativeDirectory>
     </FilesToPackage>
   </ItemGroup>
+  <ItemGroup Condition="Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')">
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\viogpu_wgl_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libEGL_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libGLESv2_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\opengl32_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\vulkan_lvp_wow64.dll">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(ProjectDir)icd\lvp_icd.i686.json">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="$(ProjectDir)icd\virtio_icd.i686.json">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+  </ItemGroup>
   <ItemGroup Condition="Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')">
     <Inf Include="viogpu3d.inx" />
   </ItemGroup>
@@ -372,12 +414,34 @@
     <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.x86_64.json" />
     <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.x86_64.json" />
   </ItemGroup>
-  <ItemGroup>
-    <Inf Include="viogpu3d.inx" />
+  <ItemGroup Condition="Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')">
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\viogpu_wgl_wow64.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libEGL_wow64.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM_wow64.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libGLESv2_wow64.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio_wow64.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\opengl32_wow64.dll" />
+    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\vulkan_lvp_wow64.dll" />
+    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.i686.json" />
+    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.i686.json" />
   </ItemGroup>
   <Target Name="UpdateVulkanIcdJsons" BeforeTargets="PrepareForBuild" Condition="'$(MESA_PREFIX)' != '' AND Exists('$(ProjectDir)tools\update_icd_jsons.ps1')">
     <Message Text="Updating Vulkan ICD JSONs from $(MESA_PREFIX)" Importance="High" />
     <Exec Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX)&quot;" />
+    <Exec Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX_WOW64)&quot; -Wow64" />
+  </Target>
+  <Target Name="CopyWow64MesaDllsWithSuffix" BeforeTargets="DriverPackageTarget" Condition="Exists('$(MESA_PREFIX_WOW64)\bin')">
+    <Message Text="Generating _wow64 suffixed copies of WOW64 Mesa DLLs..." Importance="High" />
+    <ItemGroup>
+      <Wow64SourceDlls Include="$(MESA_PREFIX_WOW64)\bin\libEGL.dll;$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM.dll;$(MESA_PREFIX_WOW64)\bin\libGLESv2.dll;$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio.dll;$(MESA_PREFIX_WOW64)\bin\opengl32.dll;$(MESA_PREFIX_WOW64)\bin\vulkan_lvp.dll" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(Wow64SourceDlls)"
+      DestinationFiles="@(Wow64SourceDlls->'$(MESA_PREFIX_WOW64)\bin\%(Filename)_wow64%(Extension)')"
+      SkipUnchangedFiles="true"
+      OverwriteReadOnlyFiles="true"
+    />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Condition="Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')" Project="$(MSBuildProjectDirectory)\..\..\build\Driver.Common.targets" />

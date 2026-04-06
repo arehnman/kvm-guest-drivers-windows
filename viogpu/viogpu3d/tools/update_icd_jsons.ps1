@@ -1,6 +1,7 @@
 param(
   [string]$MesaPrefix = $env:MESA_PREFIX,
-  [string]$OutDir = (Join-Path $PSScriptRoot '..\icd')
+  [string]$OutDir = (Join-Path $PSScriptRoot '..\icd'),
+  [switch]$Wow64
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,10 +23,17 @@ if (-not (Test-Path $OutDir)) {
   New-Item -ItemType Directory -Path $OutDir | Out-Null
 }
 
-$icdFiles = @(
-  @{ Name = 'virtio_icd.x86_64.json'; Dll = 'libvulkan_virtio.dll' },
-  @{ Name = 'lvp_icd.x86_64.json'; Dll = 'vulkan_lvp.dll' }
-)
+if (-not $Wow64) {
+  $icdFiles = @(
+    @{ Name = 'virtio_icd.x86_64.json'; Dll = 'libvulkan_virtio.dll' },
+    @{ Name = 'lvp_icd.x86_64.json'; Dll = 'vulkan_lvp.dll' }
+  )
+} else {
+  $icdFiles = @(
+    @{ Name = 'virtio_icd.i686.json'; Dll = 'libvulkan_virtio.dll' },
+    @{ Name = 'lvp_icd.i686.json'; Dll = 'vulkan_lvp.dll' }
+  )
+}
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
