@@ -97,7 +97,7 @@ typedef struct _VIOGPU_CAPSET_REQ
     ULONG CapsetId;
     ULONG Version;
     ULONG Size;
-    UCHAR *Capset;
+    ULONG64 Capset;
 } VIOGPU_CAPSET_REQ;
 #pragma pack()
 

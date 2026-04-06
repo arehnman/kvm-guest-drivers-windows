@@ -773,7 +773,7 @@ NTSTATUS VioGpuAdapter::Escape(_In_ CONST DXGKARG_ESCAPE *pEscape)
                 ULONG to_copy = min(pVioGpuEscape->Capset.Size, pCapsetInfo->max_size);
                 __try
                 {
-                    memcpy(pVioGpuEscape->Capset.Capset, buf, to_copy);
+                    memcpy((UCHAR *)(UINT_PTR)pVioGpuEscape->Capset.Capset, buf, to_copy);
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER)
                 {
