@@ -216,7 +216,7 @@ PAGED_CODE_SEG_END
 size_t pci_get_resource_len(void *context, int bar)
 {
     IVioGpuPCI *pdev = static_cast<IVioGpuPCI *>(context);
-    return pdev->GetPciResources()->GetBarSize(bar);
+    return (size_t)pdev->GetPciResources()->GetBarSize(bar);
 }
 
 void *pci_map_address_range(void *context, int bar, size_t offset, size_t maxlen)

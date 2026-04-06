@@ -519,7 +519,7 @@ NTSTATUS VioGpuAllocation::DxgkCreateAllocation(VioGpuAdapter *adapter, DXGKARG_
 
     if (segment_id == 2) {
         allocationInfo->Alignment = PAGE_SIZE;
-        allocationInfo->Size = allocation->GetBlobSize();
+        allocationInfo->Size = (SIZE_T)allocation->GetBlobSize();
         allocationInfo->EvictionSegmentSet = 0;
     }
 
