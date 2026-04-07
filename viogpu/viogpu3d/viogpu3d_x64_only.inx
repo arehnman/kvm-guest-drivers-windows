@@ -1,0 +1,128 @@
+;/*++
+;
+;INX_COPYRIGHT_1
+;INX_COPYRIGHT_2
+;
+; viogpu3d.inf
+;
+
+[Version]
+Signature="$Windows NT$"
+Class=Display
+ClassGUID={4d36e968-e325-11ce-bfc1-08002be10318}
+Provider=%HARDSOFT%
+DriverVer= 09/05/2018, 1.01.01.0002
+CatalogFile=viogpu3d.cat
+PnpLockdown     = 1
+
+[DestinationDirs]
+VioGpu3D_Files.Driver = 13 ; driver store
+VioGpu3D_Files.Usermode = 11 ; system32
+VioGpu3D_Files.Vulkan = 11 ; system32
+
+[SourceDisksNames]
+1 = %DiskId1%,,,""
+
+[SourceDisksFiles]
+viogpu3d.sys = 1,,f
+viogpu_d3d10.dll = 1,,
+viogpu_wgl.dll = 1,,
+libEGL.dll = 1,,
+libGLESv1_CM.dll = 1,,
+libGLESv2.dll = 1,,
+libvulkan_virtio.dll = 1,,
+opengl32.dll = 1,,
+vulkan_lvp.dll = 1,,
+lvp_icd.x86_64.json = 1,,
+virtio_icd.x86_64.json = 1,,
+[Manufacturer]
+%HARDSOFT%=HARDSOFT,NT$ARCH$...16299
+[HARDSOFT.NT$ARCH$...16299]
+%VioGpu3D.DeviceDesc% = VioGpu3D_Inst, PCI\VEN_1AF4&DEV_1050&SUBSYS_11001AF4&REV_01
+[VioGpu3D_Files.Driver]
+viogpu3d.sys,,,2
+
+[VioGpu3D_Files.Usermode]
+viogpu_d3d10.dll,,,0
+viogpu_wgl.dll,,,0
+libEGL.dll,,,0
+libGLESv1_CM.dll,,,0
+libGLESv2.dll,,,0
+opengl32.dll,,,0
+[VioGpu3D_Files.Vulkan]
+libvulkan_virtio.dll,,,0
+vulkan_lvp.dll,,,0
+lvp_icd.x86_64.json,,,0
+virtio_icd.x86_64.json,,,0
+[VioGpu3D_Inst.NT]
+Include=msdv.inf
+FeatureScore=F9
+CopyFiles=VioGpu3D_Files.Driver, VioGpu3D_Files.Usermode, VioGpu3D_Files.Vulkan
+AddReg=VioGpu3D_DeviceSettings
+
+[VioGpu3D_Inst.NT.Services]
+AddService = VioGpu3D,0x00000002,VioGpu3D_Service_Inst, VioGpu3D_EventLog_Inst
+
+[VioGpu3D_Inst.NT.HW]
+AddReg = VioGpu3D_PCI_MSIX
+[VioGpu3D_Service_Inst]
+ServiceType = %SERVICE_KERNEL_DRIVER%
+StartType = %SERVICE_DEMAND_START%
+ErrorControl = %SERVICE_ERROR_IGNORE%
+ServiceBinary = %13%\viogpu3d.sys
+
+[VioGpu3D_EventLog_Inst]
+AddReg = VioGpu3D_EventLog_Inst.AddReg
+
+[VioGpu3D_EventLog_Inst.AddReg]
+HKR,,EventMessageFile,%REG_EXPAND_SZ%,"%%SystemRoot%%\System32\IoLogMsg.dll"
+HKR,,TypesSupported,%REG_DWORD%,7
+
+[VioGpu3D_DeviceSettings]
+HKR,, HWCursor,                    %REG_DWORD%, 0
+HKR,, FlexResolution,              %REG_DWORD%, 1
+HKR,, UsePhysicalMemory,           %REG_DWORD%, 0
+HKR,, UserModeDriverName,          %REG_MULTI_SZ%, %11%\viogpu_d3d10.dll,%11%\viogpu_d3d10.dll,%11%\viogpu_d3d10.dll,%11%\viogpu_d3d10.dll
+HKR,, OpenGLDriverName,            %REG_MULTI_SZ%, %11%\viogpu_wgl.dll
+HKR,, OpenGLFlags,                 %REG_DWORD%, 3
+HKR,, OpenGLVersion,               %REG_DWORD%, 4096
+HKR,, InstalledDisplayDrivers,     %REG_MULTI_SZ%, viogpu_d3d10,viogpu_d3d10,viogpu_d3d10
+
+
+HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\lvp_icd.x86_64.json",%REG_DWORD%,0
+HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\virtio_icd.x86_64.json",%REG_DWORD%,0
+HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler",EnablePreemption,%REG_DWORD%,0
+HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",TdrDebugMode,%REG_DWORD%,1
+
+[VioGpu3D_PCI_MSIX]
+HKR, "Interrupt Management",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 0
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MessageNumberLimit, 0x00010001, 4
+;HKR, "Interrupt Management\Affinity Policy",, 0x00000010
+;HKR, "Interrupt Management\Affinity Policy", DevicePolicy, 0x00010001, 5
+;HKR, "Interrupt Management\Affinity Policy", DevicePriority, 0x00010001, 3
+
+[Strings]
+
+;  *******Localizable Strings*******
+diskId1 = "Hardsoft VirtIO GPU controller Installation Disk"
+VioGpu3D.DeviceDesc = "Hardsoft VirtIO GPU 3D controller"
+HARDSOFT = "Hardsoft Swed."
+
+;  *******Non Localizable Strings*******
+SERVICE_BOOT_START = 0x0
+SERVICE_SYSTEM_START = 0x1
+SERVICE_AUTO_START = 0x2
+SERVICE_DEMAND_START = 0x3
+SERVICE_DISABLED = 0x4
+
+SERVICE_KERNEL_DRIVER = 0x1
+SERVICE_ERROR_IGNORE = 0x0
+SERVICE_ERROR_NORMAL = 0x1
+SERVICE_ERROR_SEVERE = 0x2
+SERVICE_ERROR_CRITICAL = 0x3
+
+REG_MULTI_SZ   = 0x00010000
+REG_EXPAND_SZ = 0x00020000
+REG_DWORD = 0x00010001
