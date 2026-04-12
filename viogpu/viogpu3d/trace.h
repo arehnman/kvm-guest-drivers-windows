@@ -30,11 +30,14 @@
     if (Level <= nDebugLevel) VirtioDebugPrintProc(DbgExpandArguments MSG);
 #define VioGpuDbgBreak()\
     if (KD_DEBUGGER_ENABLED && !KD_DEBUGGER_NOT_PRESENT && bBreakAlways) DbgBreakPoint();
-
-#define WPP_INIT_TRACING(driver, regpath)  InitializeDebugPrints(driver, regpath);
-#define WPP_CLEANUP(driver)
+#define VIOGPU_TRACE_INIT(driver, regpath) InitializeDebugPrints(driver, regpath)
+#define VIOGPU_TRACE_CLEANUP(driver) do { UNREFERENCED_PARAMETER(driver); } while (0)
 #else
-//#define DbgPrint(level, line) {};
+// When DBG is not enabled, keep call sites buildable without relying on WPP-generated aliases.
+#define DbgExpandArguments(...) __VA_ARGS__
+#define DbgPrint(Level, MSG) do { UNREFERENCED_PARAMETER(Level); __noop(DbgExpandArguments MSG); } while (0)
+#define VIOGPU_TRACE_INIT(driver, regpath) do { UNREFERENCED_PARAMETER(driver); UNREFERENCED_PARAMETER(regpath); } while (0)
+#define VIOGPU_TRACE_CLEANUP(driver) do { UNREFERENCED_PARAMETER(driver); } while (0)
 
 #define WPP_CHECK_FOR_NULL_STRING  // to prevent exceptions due to NULL strings.
 

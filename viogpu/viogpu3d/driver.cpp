@@ -35,9 +35,6 @@
 #include "baseobj.h"
 #include "viogpu_adapter.h"
 #include "viogpu_device.h"
-#if !DBG
-#include "driver.tmh"
-#endif
 
 #pragma code_seg(push)
 #pragma code_seg("INIT")
@@ -79,7 +76,7 @@ void InitializeDebugPrints(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Re
 extern "C" NTSTATUS DriverEntry(_In_ DRIVER_OBJECT *pDriverObject, _In_ UNICODE_STRING *pRegistryPath)
 {
     PAGED_CODE();
-    WPP_INIT_TRACING(pDriverObject, pRegistryPath)
+    VIOGPU_TRACE_INIT(pDriverObject, pRegistryPath);
     DbgPrint(TRACE_LEVEL_FATAL, ("---> VIOGPU FULL build on on %s %s\n", __DATE__, __TIME__));
     DRIVER_INITIALIZATION_DATA InitialData = {0};
 
@@ -176,7 +173,7 @@ VOID VioGpu3DUnload(VOID)
 {
     PAGED_CODE();
     DbgPrint(TRACE_LEVEL_INFORMATION, ("<--> %s\n", __FUNCTION__));
-    WPP_CLEANUP(NULL);
+    VIOGPU_TRACE_CLEANUP(NULL);
 }
 
 NTSTATUS
@@ -439,6 +436,7 @@ APIENTRY
 VioGpu3DDescribeAllocation(_In_ CONST HANDLE hAdapter, _Inout_ DXGKARG_DESCRIBEALLOCATION *pDescribeAllocation)
 {
     PAGED_CODE();
+    UNREFERENCED_PARAMETER(hAdapter);
     VIOGPU_ASSERT_CHK(hAdapter != NULL);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
@@ -465,6 +463,7 @@ APIENTRY
 VioGpu3DCloseAllocation(_In_ CONST HANDLE hDevice, _In_ CONST DXGKARG_CLOSEALLOCATION *pCloseAllocation)
 {
     PAGED_CODE();
+    UNREFERENCED_PARAMETER(hDevice);
     VIOGPU_ASSERT_CHK(hDevice != NULL);
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
 
@@ -524,6 +523,7 @@ APIENTRY
 VioGpu3DBuildPagingBuffer(_In_ CONST HANDLE hAdapter, _In_ DXGKARG_BUILDPAGINGBUFFER *pBuildPagingBuffer)
 {
     PAGED_CODE();
+    UNREFERENCED_PARAMETER(hAdapter);
     VIOGPU_ASSERT_CHK(hAdapter != NULL);
     VIOGPU_ASSERT(pBuildPagingBuffer != NULL);
 
