@@ -773,7 +773,8 @@ NTSTATUS VioGpuAdapter::Escape(_In_ CONST DXGKARG_ESCAPE *pEscape)
                 ULONG to_copy = min(pVioGpuEscape->Capset.Size, pCapsetInfo->max_size);
                 __try
                 {
-                    memcpy((UCHAR *)(UINT_PTR)pVioGpuEscape->Capset.Capset, buf, to_copy);
+                    UCHAR *userCapset = (UCHAR *)(ULONG_PTR)pVioGpuEscape->Capset.Capset;
+                    memcpy(userCapset, buf, to_copy);
                 }
                 __except (EXCEPTION_EXECUTE_HANDLER)
                 {
@@ -1621,18 +1622,27 @@ NTSTATUS VioGpuAdapter::HWInit(PCM_RESOURCE_LIST pResList)
         {
             PGPU_VBUFFER vbuf = NULL;
 
+            DbgPrint(TRACE_LEVEL_VERBOSE,
+                     ("%s querying capset info index=%d/%d\n", __FUNCTION__, i, m_u32NumCapsets));
+
             /* ARE 2025-08-30 Spice server v0.16.0 does not return CapsetInfo if the display is not visible */
 
             if (!ctrlQueue.AskCapsetInfo(&vbuf, i))
             {
-                DbgPrint(TRACE_LEVEL_FATAL, ("%s AskCapsetInfo failed\n", __FUNCTION__));
-                return STATUS_INTERNAL_ERROR;
+                DbgPrint(TRACE_LEVEL_ERROR, ("%s AskCapsetInfo failed for index %d\n", __FUNCTION__, i));
+                continue;
             }
 
             PGPU_RESP_CAPSET_INFO resp = (PGPU_RESP_CAPSET_INFO)vbuf->resp_buf;
             ULONG capset_id = resp->capset_id;
             if (capset_id > 63 || capset_id <= 0)
             {
+                DbgPrint(TRACE_LEVEL_WARNING,
+                         ("%s invalid capset response index=%d id=%d resp_type=0x%x\n",
+                          __FUNCTION__,
+                          i,
+                          capset_id,
+                          resp->hdr.type));
                 ctrlQueue.ReleaseBuffer(vbuf);
                 continue; // Invalid capset id, capsets ids are in range from 1 to 63 per specification
             }
@@ -1647,6 +1657,14 @@ NTSTATUS VioGpuAdapter::HWInit(PCM_RESOURCE_LIST pResList)
                       resp->capset_max_size,
                       resp->capset_max_version));
             ctrlQueue.ReleaseBuffer(vbuf);
+        }
+
+        if (m_supportedCapsetIDs == 0)
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s no capsets negotiated (num_capsets=%d), continuing with limited functionality\n",
+                      __FUNCTION__,
+                      m_u32NumCapsets));
         }
 
     } while (0);
