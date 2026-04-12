@@ -38,3 +38,4 @@ codeql_db
 *.sarif
 *CodeAnalysis.log
 vc.nativecodeanalysis.all.xml
+viogpu/viogpu3d/icd
