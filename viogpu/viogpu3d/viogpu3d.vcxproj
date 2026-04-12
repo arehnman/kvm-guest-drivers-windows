@@ -25,6 +25,22 @@
       <Configuration>Win10 Release</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Win11 Release|ARM64">
+      <Configuration>Win11 Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Win11 Release|x64">
+      <Configuration>Win11 Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Win11 Debug|ARM64">
+      <Configuration>Win11 Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Win11 Debug|x64">
+      <Configuration>Win11 Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{ACF8BC77-62AA-4CF3-B19B-CA96CB240168}</ProjectGuid>
@@ -32,7 +48,7 @@
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <MinimumVisualStudioVersion>12.0</MinimumVisualStudioVersion>
     <Configuration>Win10 Release</Configuration>
-    <Platform Condition="'$(Platform)' == ''">Win32</Platform>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
     <SignMode>Off</SignMode>
     <WindowsTargetPlatformVersion>$(LatestTargetPlatformVersion)</WindowsTargetPlatformVersion>
     <ProjectName>viogpu3d</ProjectName>
@@ -91,8 +107,48 @@
     <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
     <DriverTargetPlatform>Desktop</DriverTargetPlatform>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Release|ARM64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>WDM</DriverType>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Release|x64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>WDM</DriverType>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Debug|ARM64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>WDM</DriverType>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Debug|x64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>WDM</DriverType>
+    <ALLOW_DATE_TIME>1</ALLOW_DATE_TIME>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
+  </PropertyGroup>
   <Import Project="$(MSBuildProjectDirectory)\viogpu3d.props" />
   <Import Project="$(MSBuildProjectDirectory)\..\..\build\Driver.Common.props" />
+  <!-- Override Win11 InfArch to avoid duplicate ...16299 suffix during StampInf because viogpu3d.inx already specifies it -->
+  <PropertyGroup Condition="'$(TargetOS)'=='Win11'">
+    <InfArch>$(TargetArch).10.0</InfArch>
+  </PropertyGroup>
   <!-- Override Driver.Common.props (Universal) to allow non-DCH registry writes -->
   <PropertyGroup>
     <DriverTargetPlatform>Desktop</DriverTargetPlatform>
@@ -138,6 +194,30 @@
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <OutDir>objchk_win10_amd64\amd64\</OutDir>
     <IntDir>objchk_win10_amd64\amd64\</IntDir>
+    <TargetName>viogpu3d</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Release|ARM64'">
+    <TargetName>viogpu3d</TargetName>
+    <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
+    <OutDir>objfre_win11_arm64\arm64\</OutDir>
+    <IntDir>objfre_win11_arm64\arm64\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Release|x64'">
+    <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
+    <OutDir>objfre_win11_amd64\amd64\</OutDir>
+    <IntDir>objfre_win11_amd64\amd64\</IntDir>
+    <TargetName>viogpu3d</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Debug|ARM64'">
+    <TargetName>viogpu3d</TargetName>
+    <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
+    <OutDir>objchk_win11_arm64\arm64\</OutDir>
+    <IntDir>objchk_win11_arm64\arm64\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Debug|x64'">
+    <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
+    <OutDir>objchk_win11_amd64\amd64\</OutDir>
+    <IntDir>objchk_win11_amd64\amd64\</IntDir>
     <TargetName>viogpu3d</TargetName>
   </PropertyGroup>
   <PropertyGroup>
@@ -270,6 +350,72 @@
       <Message>update build date</Message>
     </PreBuildEvent>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Release|ARM64'">
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(DDK_LIB_PATH)\displib.lib;virtiolib.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\VirtIO\$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);..\common;..\shared;..\..\VirtIO;..\viogpu3d\;</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VIOGPU_3D=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WppEnabled>true</WppEnabled>
+      <WppScanConfigurationData>trace.h</WppScanConfigurationData>
+    </ClCompile>
+    <PostBuildEvent />
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);..\common;..\shared;..\..\VirtIO;..\viogpu3d\;</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VIOGPU_3D=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WppEnabled>true</WppEnabled>
+      <WppScanConfigurationData>trace.h</WppScanConfigurationData>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(DDK_LIB_PATH)\displib.lib;virtiolib.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\VirtIO\$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+    <PostBuildEvent>
+    </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>copy /b driver.cpp +,,</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>update build date</Message>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Debug|ARM64'">
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(DDK_LIB_PATH)\displib.lib;virtiolib.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\VirtIO\$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);..\common;..\shared;..\..\VirtIO;..\viogpu3d\;</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VIOGPU_3D=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WppEnabled>true</WppEnabled>
+      <WppScanConfigurationData>trace.h</WppScanConfigurationData>
+    </ClCompile>
+    <PostBuildEvent />
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Win11 Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories);$(DDK_INC_PATH);$(SDK_INC_PATH);..\common;..\shared;..\..\VirtIO;..\viogpu3d\;</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VIOGPU_3D=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WppEnabled>true</WppEnabled>
+      <WppScanConfigurationData>trace.h</WppScanConfigurationData>
+      <Optimization>Disabled</Optimization>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(DDK_LIB_PATH)\displib.lib;virtiolib.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\VirtIO\$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+    <PostBuildEvent />
+    <PreBuildEvent>
+      <Command>copy /b driver.cpp +,,</Command>
+    </PreBuildEvent>
+    <PreBuildEvent>
+      <Message>update build date</Message>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\common\baseobj.h" />
     <ClInclude Include="..\common\bitops.h" />
@@ -304,192 +450,203 @@
   <ItemGroup>
     <ResourceCompile Include="viogpu3d.rc" />
   </ItemGroup>
+  <PropertyGroup>
+    <MesaStageDir>$(IntDir)messa_stage\</MesaStageDir>
+  </PropertyGroup>
+  <Target Name="StageMesaDlls" BeforeTargets="PrepareForBuild">
+    <MakeDir Condition="Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll')" Directories="$(MesaStageDir)x64" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll" DestinationFiles="$(MesaStageDir)x64\viogpu_d3d10_x64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\viogpu_wgl.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\viogpu_wgl.dll" DestinationFiles="$(MesaStageDir)x64\viogpu_wgl_x64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\libEGL.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\libEGL.dll" DestinationFiles="$(MesaStageDir)x64\libEGL_x64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\libGLESv1_CM.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\libGLESv1_CM.dll" DestinationFiles="$(MesaStageDir)x64\libGLESv1_CM_x64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\libGLESv2.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\libGLESv2.dll" DestinationFiles="$(MesaStageDir)x64\libGLESv2_x64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\libvulkan_virtio.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\libvulkan_virtio.dll" DestinationFiles="$(MesaStageDir)x64\libvulkan_virtio_x64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\opengl32.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\opengl32.dll" DestinationFiles="$(MesaStageDir)x64\opengl32_x64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x64)\bin\vulkan_lvp.dll')" SourceFiles="$(MESA_PREFIX_x64)\bin\vulkan_lvp.dll" DestinationFiles="$(MesaStageDir)x64\vulkan_lvp_x64.dll" SkipUnchangedFiles="true" />
+
+    <MakeDir Condition="Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll')" Directories="$(MesaStageDir)arm64" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll" DestinationFiles="$(MesaStageDir)arm64\viogpu_d3d10_arm64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_wgl.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\viogpu_wgl.dll" DestinationFiles="$(MesaStageDir)arm64\viogpu_wgl_arm64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\libEGL.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\libEGL.dll" DestinationFiles="$(MesaStageDir)arm64\libEGL_arm64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\libGLESv1_CM.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\libGLESv1_CM.dll" DestinationFiles="$(MesaStageDir)arm64\libGLESv1_CM_arm64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\libGLESv2.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\libGLESv2.dll" DestinationFiles="$(MesaStageDir)arm64\libGLESv2_arm64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\libvulkan_virtio.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\libvulkan_virtio.dll" DestinationFiles="$(MesaStageDir)arm64\libvulkan_virtio_arm64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\opengl32.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\opengl32.dll" DestinationFiles="$(MesaStageDir)arm64\opengl32_arm64.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_ARM64)\bin\vulkan_lvp.dll')" SourceFiles="$(MESA_PREFIX_ARM64)\bin\vulkan_lvp.dll" DestinationFiles="$(MesaStageDir)arm64\vulkan_lvp_arm64.dll" SkipUnchangedFiles="true" />
+
+    <MakeDir Condition="Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" Directories="$(MesaStageDir)x86" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll" DestinationFiles="$(MesaStageDir)x86\viogpu_d3d10_x86.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\viogpu_wgl.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\viogpu_wgl.dll" DestinationFiles="$(MesaStageDir)x86\viogpu_wgl_x86.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\libEGL.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\libEGL.dll" DestinationFiles="$(MesaStageDir)x86\libEGL_x86.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\libGLESv1_CM.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\libGLESv1_CM.dll" DestinationFiles="$(MesaStageDir)x86\libGLESv1_CM_x86.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\libGLESv2.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\libGLESv2.dll" DestinationFiles="$(MesaStageDir)x86\libGLESv2_x86.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\libvulkan_virtio.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\libvulkan_virtio.dll" DestinationFiles="$(MesaStageDir)x86\libvulkan_virtio_x86.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\opengl32.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\opengl32.dll" DestinationFiles="$(MesaStageDir)x86\opengl32_x86.dll" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MESA_PREFIX_x86)\bin\vulkan_lvp.dll')" SourceFiles="$(MESA_PREFIX_x86)\bin\vulkan_lvp.dll" DestinationFiles="$(MesaStageDir)x86\vulkan_lvp_x86.dll" SkipUnchangedFiles="true" />
+  </Target>
   <ItemGroup>
     <FilesToPackage Include="$(OutDir)viogpu3d.sys">
       <PackageRelativeDirectory>
       </PackageRelativeDirectory>
     </FilesToPackage>
   </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' != 'Win32' AND Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')">
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\viogpu_d3d10.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+  <ItemGroup Condition="'$(Platform)' == 'x64' AND Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll')">
+    <FilesToPackage Include="$(MesaStageDir)x64\viogpu_d3d10_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\viogpu_wgl.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x64\viogpu_wgl_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\libEGL.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x64\libEGL_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\libGLESv1_CM.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x64\libGLESv1_CM_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\libGLESv2.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x64\libGLESv2_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\libvulkan_virtio.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x64\libvulkan_virtio_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\opengl32.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x64\opengl32_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX)\bin\vulkan_lvp.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x64\vulkan_lvp_x64.dll">
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
     <FilesToPackage Include="$(ProjectDir)icd\lvp_icd.x86_64.json">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
     <FilesToPackage Include="$(ProjectDir)icd\virtio_icd.x86_64.json">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+      <PackageRelativeDirectory>x64</PackageRelativeDirectory>
     </FilesToPackage>
   </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' != 'Win32' AND Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')">
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+  <ItemGroup Condition="'$(Platform)' == 'ARM64' AND Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll')">
+    <FilesToPackage Include="$(MesaStageDir)arm64\viogpu_d3d10_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\viogpu_wgl_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)arm64\viogpu_wgl_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libEGL_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)arm64\libEGL_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)arm64\libGLESv1_CM_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libGLESv2_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)arm64\libGLESv2_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)arm64\libvulkan_virtio_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\opengl32_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)arm64\opengl32_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\vulkan_lvp_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)arm64\vulkan_lvp_arm64.dll">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(ProjectDir)icd\lvp_icd.i686.json">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(ProjectDir)icd\lvp_icd.aarch64.json">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(ProjectDir)icd\virtio_icd.i686.json">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(ProjectDir)icd\virtio_icd.aarch64.json">
+      <PackageRelativeDirectory>arm64</PackageRelativeDirectory>
     </FilesToPackage>
   </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' == 'Win32' AND Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')">
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+  <ItemGroup Condition="Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')">
+    <FilesToPackage Include="$(MesaStageDir)x86\viogpu_d3d10_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\viogpu_wgl_wow64.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x86\viogpu_wgl_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libEGL.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x86\libEGL_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x86\libGLESv1_CM_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libGLESv2.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x86\libGLESv2_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x86\libvulkan_virtio_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\opengl32.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x86\opengl32_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(MESA_PREFIX_WOW64)\bin\vulkan_lvp.dll">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(MesaStageDir)x86\vulkan_lvp_x86.dll">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(ProjectDir)icd\lvp_icd.i686.json">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(ProjectDir)icd\lvp_icd.x86.json">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="$(ProjectDir)icd\virtio_icd.i686.json">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="$(ProjectDir)icd\virtio_icd.x86.json">
+      <PackageRelativeDirectory>x86</PackageRelativeDirectory>
     </FilesToPackage>
   </ItemGroup>
-  <ItemGroup Condition="Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll') OR Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')">
+  <ItemGroup Condition="('$(Platform)' == 'Win32' AND Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')) OR ('$(Platform)' == 'x64' AND Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll')) OR ('$(Platform)' == 'ARM64' AND Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll'))">
     <Inf Include="viogpu3d.inx" />
   </ItemGroup>
   <!--  <ItemGroup Condition="'$(BUILD_RESOLUTIONS_USERMODE)'!=''"> -->
-  <ItemGroup Condition="'$(Platform)' != 'Win32' AND Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')">
+  <ItemGroup Condition="'$(Platform)' == 'x64' AND Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll')">
     <PackOne_Files Include="..\viogpuap\$(OutDir)viogpuap.exe" />
     <PackOne_Files Include="..\viogpuap\$(OutDir)viogpuap.pdb" />
     <PackOne_Files Include="..\viogpusc\$(OutDir)vgpusrv.exe" />
     <PackOne_Files Include="..\viogpusc\$(OutDir)vgpusrv.pdb" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\viogpu_d3d10.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\viogpu_wgl.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\libEGL.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\libGLESv1_CM.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\libGLESv2.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\libvulkan_virtio.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\opengl32.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX)\bin\vulkan_lvp.dll" />
-    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.x86_64.json" />
-    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.x86_64.json" />
+    <PackOne_Files Include="$(MesaStageDir)x64\viogpu_d3d10_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x64\viogpu_wgl_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x64\libEGL_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x64\libGLESv1_CM_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x64\libGLESv2_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x64\libvulkan_virtio_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x64\opengl32_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x64\vulkan_lvp_x64.dll"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.x86_64.json"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.x86_64.json"><PackOne_Subdir>x64</PackOne_Subdir></PackOne_Files>
   </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' != 'Win32' AND Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')">
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\viogpu_wgl_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libEGL_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libGLESv2_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\opengl32_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\vulkan_lvp_wow64.dll" />
-    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.i686.json" />
-    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.i686.json" />
+  <ItemGroup Condition="'$(Platform)' == 'ARM64' AND Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll')">
+    <PackOne_Files Include="..\viogpuap\$(OutDir)viogpuap.exe" />
+    <PackOne_Files Include="..\viogpuap\$(OutDir)viogpuap.pdb" />
+    <PackOne_Files Include="..\viogpusc\$(OutDir)vgpusrv.exe" />
+    <PackOne_Files Include="..\viogpusc\$(OutDir)vgpusrv.pdb" />
+    <PackOne_Files Include="$(MesaStageDir)arm64\viogpu_d3d10_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)arm64\viogpu_wgl_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)arm64\libEGL_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)arm64\libGLESv1_CM_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)arm64\libGLESv2_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)arm64\libvulkan_virtio_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)arm64\opengl32_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)arm64\vulkan_lvp_arm64.dll"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.aarch64.json"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.aarch64.json"><PackOne_Subdir>arm64</PackOne_Subdir></PackOne_Files>
   </ItemGroup>
-  <ItemGroup Condition="'$(Platform)' == 'Win32' AND Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')">
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\viogpu_wgl_wow64.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libEGL.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libGLESv2.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\opengl32.dll" />
-    <PackOne_Files Include="$(MESA_PREFIX_WOW64)\bin\vulkan_lvp.dll" />
-    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.i686.json" />
-    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.i686.json" />
+  <ItemGroup Condition="Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')">
+    <PackOne_Files Include="$(MesaStageDir)x86\viogpu_d3d10_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x86\viogpu_wgl_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x86\libEGL_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x86\libGLESv1_CM_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x86\libGLESv2_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x86\libvulkan_virtio_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x86\opengl32_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(MesaStageDir)x86\vulkan_lvp_x86.dll"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(ProjectDir)icd\lvp_icd.x86.json"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
+    <PackOne_Files Include="$(ProjectDir)icd\virtio_icd.x86.json"><PackOne_Subdir>x86</PackOne_Subdir></PackOne_Files>
   </ItemGroup>
-  <Target Name="UpdateVulkanIcdJsons" BeforeTargets="PrepareForBuild" Condition="'$(MESA_PREFIX)|$(MESA_PREFIX_WOW64)' != '|' AND Exists('$(ProjectDir)tools\update_icd_jsons.ps1')">
-    <Message Text="Updating Vulkan ICD JSONs from $(MESA_PREFIX) $(MESA_PREFIX_WOW64)" Importance="High" />
-    <Exec Condition="Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')" Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX)&quot;" />
-    <Exec Condition="Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')" Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX_WOW64)&quot; -Wow64" />
+  <Target Name="UpdateVulkanIcdJsons" BeforeTargets="PrepareForBuild" Condition="(('$(Platform)' == 'Win32' AND '$(MESA_PREFIX_x86)' != '') OR ('$(Platform)' == 'x64' AND '$(MESA_PREFIX_x64)' != '') OR ('$(Platform)' == 'ARM64' AND '$(MESA_PREFIX_ARM64)' != '')) AND Exists('$(ProjectDir)tools\update_icd_jsons.ps1')">
+    <Message Text="Updating Vulkan ICD JSONs from x64=$(MESA_PREFIX_x64) arm64=$(MESA_PREFIX_ARM64) x86=$(MESA_PREFIX_x86)" Importance="High" />
+    <Exec Condition="'$(Platform)' == 'x64' AND Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll')" Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX_x64)&quot;" />
+    <Exec Condition="'$(Platform)' == 'ARM64' AND Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll')" Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX_ARM64)&quot; -MesaArch aarch64" />
+    <Exec Condition="Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" Command="%25SystemRoot%25\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)tools\update_icd_jsons.ps1&quot; -MesaPrefix &quot;$(MESA_PREFIX_x86)&quot; -MesaArch x86" />
   </Target>
-  <Target Name="UpdateInxFile" BeforeTargets="PrepareForBuild" Condition="Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')">
+  <Target Name="UpdateInxFile" BeforeTargets="PrepareForBuild" Condition="('$(Platform)' == 'Win32' AND Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')) OR ('$(Platform)' == 'x64' AND Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll')) OR ('$(Platform)' == 'ARM64' AND Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll'))">
     <Message Text="Updating driver package INX files" Importance="High" />
     <ItemGroup>
-      <TargetInxFiles Condition="'$(Platform)' != 'Win32' AND Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll') AND Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')" Include="viogpu3d_x64_wow64.inx" />
-      <TargetInxFiles Condition="'$(Platform)' != 'Win32' AND Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll') AND !Exists('$(MESA_PREFIX_WOW64)\bin\viogpu_d3d10_wow64.dll')" Include="viogpu3d_x64_only.inx" />
+      <TargetInxFiles Condition="'$(Platform)' == 'x64' AND Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll') AND Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" Include="viogpu3d_x64_wow64.inx" />
+      <TargetInxFiles Condition="'$(Platform)' == 'x64' AND Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll') AND !Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" Include="viogpu3d_x64.inx" />
+      <TargetInxFiles Condition="'$(Platform)' == 'ARM64' AND Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll') AND Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" Include="viogpu3d_arm64_wow64.inx" />
+      <TargetInxFiles Condition="'$(Platform)' == 'ARM64' AND Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll') AND !Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" Include="viogpu3d_arm64.inx" />
       <TargetInxFiles Condition="'$(Platform)' == 'Win32'" Include="viogpu3d_x86.inx" />
     </ItemGroup>
     <Copy 
@@ -499,20 +656,28 @@
       OverwriteReadOnlyFiles="true"
     />
   </Target>
-  <Target Name="CopyWow64MesaDllsWithSuffix" BeforeTargets="DriverPackageTarget" Condition="'$(Platform)' != 'Win32' AND Exists('$(MESA_PREFIX_WOW64)\bin')">
-    <Message Text="Generating _wow64 suffixed copies of WOW64 Mesa DLLs..." Importance="High" />
-    <ItemGroup>
-      <Wow64SourceDlls Include="$(MESA_PREFIX_WOW64)\bin\libEGL.dll;$(MESA_PREFIX_WOW64)\bin\libGLESv1_CM.dll;$(MESA_PREFIX_WOW64)\bin\libGLESv2.dll;$(MESA_PREFIX_WOW64)\bin\libvulkan_virtio.dll;$(MESA_PREFIX_WOW64)\bin\opengl32.dll;$(MESA_PREFIX_WOW64)\bin\vulkan_lvp.dll" />
-    </ItemGroup>
-    <Copy 
-      SourceFiles="@(Wow64SourceDlls)"
-      DestinationFiles="@(Wow64SourceDlls->'$(MESA_PREFIX_WOW64)\bin\%(Filename)_wow64%(Extension)')"
-      SkipUnchangedFiles="true"
-      OverwriteReadOnlyFiles="true"
-    />
+  <Target Name="NormalizePackOneInf" BeforeTargets="PackOneTarget">
+    <Copy SourceFiles="$(OutDir)viogpu3d_arm64.inf"
+          DestinationFiles="$(OutDir)viogpu3d.inf"
+          SkipUnchangedFiles="true"
+          Condition="'$(Platform)'=='ARM64' AND Exists('$(OutDir)viogpu3d_arm64.inf')" />
+    <Copy SourceFiles="$(OutDir)viogpu3d_amd64.inf"
+          DestinationFiles="$(OutDir)viogpu3d.inf"
+          SkipUnchangedFiles="true"
+          Condition="'$(Platform)'=='x64' AND Exists('$(OutDir)viogpu3d_amd64.inf')" />
+  </Target>
+  <Target Name="ValidateMesaPrefixes" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(Platform)'=='x64' AND '$(MESA_PREFIX_x64)'==''"
+           Text="Missing required Mesa prefix: set MESA_PREFIX_x64 for x64 build." />
+    <Error Condition="'$(Platform)'=='ARM64' AND '$(MESA_PREFIX_ARM64)'==''"
+           Text="Missing required Mesa prefix: set MESA_PREFIX_ARM64 for ARM64 build." />
+    <Warning Condition="'$(Platform)'=='x64' AND '$(MESA_PREFIX_x86)'==''"
+             Text="Missing optional Mesa prefix MESA_PREFIX_x86. x86 compatibility payload will be skipped." />
+    <Warning Condition="'$(Platform)'=='ARM64' AND '$(MESA_PREFIX_x86)'==''"
+            Text="Missing optional Mesa prefix MESA_PREFIX_x86. x86 compatibility payload is unavailable." />
   </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Import Condition="Exists('$(MESA_PREFIX)\bin\viogpu_d3d10.dll')" Project="$(MSBuildProjectDirectory)\..\..\build\Driver.Common.targets" />
+  <Import Condition="Exists('$(MESA_PREFIX_x64)\bin\viogpu_d3d10.dll') OR Exists('$(MESA_PREFIX_ARM64)\bin\viogpu_d3d10.dll') OR Exists('$(MESA_PREFIX_x86)\bin\viogpu_d3d10.dll')" Project="$(MSBuildProjectDirectory)\..\..\build\Driver.Common.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

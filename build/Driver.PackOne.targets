@@ -139,10 +139,11 @@ Related features:
   <Target Condition="'$(Feature_PackOne)'=='true'" Name="PackOneTarget" AfterTargets="AfterBuild">
     <Message Text="PackOneTarget $(TargetOS) $(TargetArch) $(PackOne_FileName)" Importance="high"/>
     <Message Text="Copying PackOne_Files=%(PackOne_Files.Identity) to $(PackOne_DestinationPath)" Importance="high"/>
+    <RemoveDir Directories="$(PackOne_DestinationPath)"/>
     <MakeDir Directories="$(PackOne_DestinationPath)"/>
-    <Delete Files="$(PackOne_DestinationPath)\*"/>
+    <MakeDir Directories="@(PackOne_Files->'$(PackOne_DestinationPath)\%(PackOne_Subdir)')"/>
     <Copy SourceFiles="@(PackOne_Files)"
-          DestinationFolder="$(PackOne_DestinationPath)"/>
+          DestinationFiles="@(PackOne_Files->'$(PackOne_DestinationPath)\%(PackOne_Subdir)\%(Filename)%(Extension)')"/>
     <Message Text="Setting OS mask for: $(TargetOS) $(TargetArch) to $(PackOne_OsMask)" Importance="high"/>
     <Exec Command="inf2cat $(PackOne_LocalTimeStamp) /driver:$(PackOne_DestinationPath) /os:$(PackOne_OsMask)" />
   </Target>

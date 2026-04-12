@@ -27,26 +27,26 @@ VioGpu3D_Files.VulkanWow64 = 16425 ; syswow64
 
 [SourceDisksFiles]
 viogpu3d.sys = 1,,f
-viogpu_d3d10.dll = 1,,
-viogpu_wgl.dll = 1,,
-libEGL.dll = 1,,
-libGLESv1_CM.dll = 1,,
-libGLESv2.dll = 1,,
-libvulkan_virtio.dll = 1,,
-opengl32.dll = 1,,
-vulkan_lvp.dll = 1,,
-lvp_icd.x86_64.json = 1,,
-virtio_icd.x86_64.json = 1,,
-viogpu_d3d10_wow64.dll = 1,,
-viogpu_wgl_wow64.dll = 1,,
-libEGL_wow64.dll = 1,,
-libGLESv1_CM_wow64.dll = 1,,
-libGLESv2_wow64.dll = 1,,
-libvulkan_virtio_wow64.dll = 1,,
-opengl32_wow64.dll = 1,,
-vulkan_lvp_wow64.dll = 1,,
-lvp_icd.i686.json = 1,,
-virtio_icd.i686.json = 1,,
+viogpu_d3d10_x64.dll = 1,x64,
+viogpu_wgl_x64.dll = 1,x64,
+libEGL_x64.dll = 1,x64,
+libGLESv1_CM_x64.dll = 1,x64,
+libGLESv2_x64.dll = 1,x64,
+libvulkan_virtio_x64.dll = 1,x64,
+opengl32_x64.dll = 1,x64,
+vulkan_lvp_x64.dll = 1,x64,
+lvp_icd.x86_64.json = 1,x64,
+virtio_icd.x86_64.json = 1,x64,
+viogpu_d3d10_x86.dll = 1,x86,
+viogpu_wgl_x86.dll = 1,x86,
+libEGL_x86.dll = 1,x86,
+libGLESv1_CM_x86.dll = 1,x86,
+libGLESv2_x86.dll = 1,x86,
+libvulkan_virtio_x86.dll = 1,x86,
+opengl32_x86.dll = 1,x86,
+vulkan_lvp_x86.dll = 1,x86,
+lvp_icd.x86.json = 1,x86,
+virtio_icd.x86.json = 1,x86,
 [Manufacturer]
 %HARDSOFT%=HARDSOFT,NT$ARCH$...16299
 [HARDSOFT.NT$ARCH$...16299]
@@ -55,29 +55,29 @@ virtio_icd.i686.json = 1,,
 viogpu3d.sys,,,2
 
 [VioGpu3D_Files.Usermode]
-viogpu_d3d10.dll,,,0
-viogpu_wgl.dll,,,0
-libEGL.dll,,,0
-libGLESv1_CM.dll,,,0
-libGLESv2.dll,,,0
-opengl32.dll,,,0
+viogpu_d3d10.dll,viogpu_d3d10_x64.dll,,0
+viogpu_wgl.dll,viogpu_wgl_x64.dll,,0
+libEGL.dll,libEGL_x64.dll,,0
+libGLESv1_CM.dll,libGLESv1_CM_x64.dll,,0
+libGLESv2.dll,libGLESv2_x64.dll,,0
+opengl32.dll,opengl32_x64.dll,,0
 [VioGpu3D_Files.Wow64]
-viogpu_d3d10_wow64.dll,,,0
-viogpu_wgl_wow64.dll,,,0
-libEGL.dll,libEGL_wow64.dll,,0
-libGLESv1_CM.dll,libGLESv1_CM_wow64.dll,,0
-libGLESv2.dll,libGLESv2_wow64.dll,,0
-opengl32.dll,opengl32_wow64.dll,,0
+viogpu_d3d10.dll,viogpu_d3d10_x86.dll,,0
+viogpu_wgl.dll,viogpu_wgl_x86.dll,,0
+libEGL.dll,libEGL_x86.dll,,0
+libGLESv1_CM.dll,libGLESv1_CM_x86.dll,,0
+libGLESv2.dll,libGLESv2_x86.dll,,0
+opengl32.dll,opengl32_x86.dll,,0
 [VioGpu3D_Files.Vulkan]
-libvulkan_virtio.dll,,,0
-vulkan_lvp.dll,,,0
+libvulkan_virtio.dll,libvulkan_virtio_x64.dll,,0
+vulkan_lvp.dll,vulkan_lvp_x64.dll,,0
 lvp_icd.x86_64.json,,,0
 virtio_icd.x86_64.json,,,0
 [VioGpu3D_Files.VulkanWow64]
-libvulkan_virtio.dll,libvulkan_virtio_wow64.dll,,0
-vulkan_lvp.dll,vulkan_lvp_wow64.dll,,0
-lvp_icd.i686.json,,,0
-virtio_icd.i686.json,,,0
+libvulkan_virtio.dll,libvulkan_virtio_x86.dll,,0
+vulkan_lvp.dll,vulkan_lvp_x86.dll,,0
+lvp_icd.x86.json,,,0
+virtio_icd.x86.json,,,0
 [VioGpu3D_Inst.NT]
 Include=msdv.inf
 FeatureScore=F9
@@ -108,19 +108,19 @@ HKR,, FlexResolution,              %REG_DWORD%, 1
 HKR,, UsePhysicalMemory,           %REG_DWORD%, 0
 HKR,, UserModeDriverName,          %REG_MULTI_SZ%, %11%\viogpu_d3d10.dll,%11%\viogpu_d3d10.dll,%11%\viogpu_d3d10.dll,%11%\viogpu_d3d10.dll
 HKR,, OpenGLDriverName,            %REG_MULTI_SZ%, %11%\viogpu_wgl.dll
-HKR,, UserModeDriverNameWow,       %REG_MULTI_SZ%, %16425%\viogpu_d3d10_wow64.dll,%16425%\viogpu_d3d10_wow64.dll,%16425%\viogpu_d3d10_wow64.dll,%16425%\viogpu_d3d10_wow64.dll
-HKR,, OpenGLDriverNameWow,         %REG_MULTI_SZ%, %16425%\viogpu_wgl_wow64.dll
+HKR,, UserModeDriverNameWow,       %REG_MULTI_SZ%, %16425%\viogpu_d3d10.dll,%16425%\viogpu_d3d10.dll,%16425%\viogpu_d3d10.dll,%16425%\viogpu_d3d10.dll
+HKR,, OpenGLDriverNameWow,         %REG_MULTI_SZ%, %16425%\viogpu_wgl.dll
 HKR,, OpenGLFlags,                 %REG_DWORD%, 3
 HKR,, OpenGLVersion,               %REG_DWORD%, 4096
 HKR,, OpenGLFlagsWow,              %REG_DWORD%, 3
 HKR,, OpenGLVersionWow,            %REG_DWORD%, 4096
-HKR,, InstalledDisplayDrivers,     %REG_MULTI_SZ%, viogpu_d3d10,viogpu_d3d10,viogpu_d3d10,viogpu_d3d10_wow64,viogpu_d3d10_wow64,viogpu_d3d10_wow64
+HKR,, InstalledDisplayDrivers,     %REG_MULTI_SZ%, viogpu_d3d10,viogpu_d3d10,viogpu_d3d10
 
 
 HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\lvp_icd.x86_64.json",%REG_DWORD%,0
 HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\virtio_icd.x86_64.json",%REG_DWORD%,0
-HKLM,"SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers","%16425%\lvp_icd.i686.json",%REG_DWORD%,0
-HKLM,"SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers","%16425%\virtio_icd.i686.json",%REG_DWORD%,0
+HKLM,"SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers","%16425%\lvp_icd.x86.json",%REG_DWORD%,0
+HKLM,"SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers","%16425%\virtio_icd.x86.json",%REG_DWORD%,0
 HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler",EnablePreemption,%REG_DWORD%,0
 HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",TdrDebugMode,%REG_DWORD%,1
 
