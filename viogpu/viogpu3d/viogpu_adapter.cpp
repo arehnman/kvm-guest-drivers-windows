@@ -37,9 +37,6 @@
 #include "bitops.h"
 #include "viogpum.h"
 #include "viogpu_device.h"
-#if !DBG
-#include "viogpudo.tmh"
-#endif
 
 typedef struct _VIOGPU_SUBMIT_ESCAPE_CTX
 {
@@ -532,7 +529,8 @@ NTSTATUS VioGpuAdapter::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO *pQ
                              ("pQueryAdapterInfo->OutputDataSize (0x%u) is smaller than sizeof(VIOGPU_ADAPTERINFO) "
                               "(0x%u)\n",
                               pQueryAdapterInfo->OutputDataSize,
-                              sizeof(VIOGPU_ADAPTERINFO))) return STATUS_BUFFER_TOO_SMALL;
+                              sizeof(VIOGPU_ADAPTERINFO)));
+                    return STATUS_BUFFER_TOO_SMALL;
                 }
                 VIOGPU_ADAPTERINFO *info = (VIOGPU_ADAPTERINFO *)pQueryAdapterInfo->pOutputData;
                 info->IamVioGPU = VIOGPU_IAM;

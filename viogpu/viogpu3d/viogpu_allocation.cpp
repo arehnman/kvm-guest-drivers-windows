@@ -4,10 +4,6 @@
  * 
  */
 
-#if DBG
-#include <ntifs.h>
-#endif
-
 #include "baseobj.h"
 #include "bitops.h"
 #include "viogpum.h"
@@ -15,6 +11,9 @@
 #include "viogpu_adapter.h"
 #include "viogpu_device.h"
 #include "virgl_hw.h"
+
+extern "C" NTSYSAPI VOID NTAPI KeAttachProcess(_Inout_ PRKPROCESS Process);
+extern "C" NTSYSAPI VOID NTAPI KeDetachProcess(VOID);
 
 static MEMORY_CACHING_TYPE VioGpuCacheTypeFromMapInfo(ULONG map_info)
 {
@@ -786,50 +785,54 @@ NTSTATUS VioGpuAllocation::EscapeResourceMapBlob(VIOGPU_RES_MAP_BLOB_REQ *resMap
 #if DBG
     if (mapping_valid && target_process)
     {
-        KAPC_STATE apc;
         BOOLEAN attached = FALSE;
         if (target_process != PsGetCurrentProcess())
         {
-            KeStackAttachProcess(target_process, &apc);
+            KeAttachProcess(reinterpret_cast<PRKPROCESS>(target_process));
             attached = TRUE;
         }
 
-        MEMORY_BASIC_INFORMATION mbi = {};
-        SIZE_T ret_len = 0;
-        NTSTATUS qstat = ZwQueryVirtualMemory(ZwCurrentProcess(),
-                                              user_va,
-                                              MemoryBasicInformation,
-                                              &mbi,
-                                              sizeof(mbi),
-                                              &ret_len);
-        mapping_valid = NT_SUCCESS(qstat) && mbi.State == MEM_COMMIT;
+        BOOLEAN probe_ok = TRUE;
+        __try
+        {
+            // Best-effort debug probe to ensure the mapped VA is readable.
+            volatile const UCHAR first = *(volatile const UCHAR *)user_va;
+            UNREFERENCED_PARAMETER(first);
+            if (map_len > 1)
+            {
+                volatile const UCHAR last = *((volatile const UCHAR *)user_va + (map_len - 1));
+                UNREFERENCED_PARAMETER(last);
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            probe_ok = FALSE;
+        }
+        mapping_valid = probe_ok;
         if (!mapping_valid)
         {
             DbgPrint(TRACE_LEVEL_ERROR,
-                     ("%s ERROR QueryVA invalid status=0x%lx state=0x%x protect=0x%x type=0x%x region=0x%llx ret=0x%Ix\n",
+                     ("%s ERROR map probe failed user_va=%p map_len=0x%llx target_pid=%p target_process=%p\n",
                       __FUNCTION__,
-                      qstat,
-                      (UINT)mbi.State,
-                      (UINT)mbi.Protect,
-                      (UINT)mbi.Type,
-                      (ULONGLONG)mbi.RegionSize,
-                      ret_len));
+                      user_va,
+                      map_len,
+                      target_pid,
+                      target_process));
             VIOGPU_ASSERT_CHK(false);
         }
 
         if (attached)
         {
-            KeUnstackDetachProcess(&apc);
+            KeDetachProcess();
         }
     }
 
     if (!mapping_valid && user_va)
     {
-        KAPC_STATE apc;
         BOOLEAN attached = FALSE;
         if (target_process && target_process != PsGetCurrentProcess())
         {
-            KeStackAttachProcess(target_process, &apc);
+            KeAttachProcess(reinterpret_cast<PRKPROCESS>(target_process));
             attached = TRUE;
         }
 
@@ -837,7 +840,7 @@ NTSTATUS VioGpuAllocation::EscapeResourceMapBlob(VIOGPU_RES_MAP_BLOB_REQ *resMap
 
         if (attached)
         {
-            KeUnstackDetachProcess(&apc);
+            KeDetachProcess();
         }
     }
 #endif
