@@ -637,12 +637,18 @@ APIENTRY
 VioGpu3DDestroyDevice(_In_ VOID *pDeviceContext)
 {
     PAGED_CODE();
-    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s 0x%p\n", __FUNCTION__, pDeviceContext));
+    DbgPrint(TRACE_LEVEL_FATAL, ("---> %s pDeviceContext=%p\n", __FUNCTION__, pDeviceContext));
 
     VioGpuDevice *pDxContext = reinterpret_cast<VioGpuDevice *>(pDeviceContext);
 
     if (pDxContext)
     {
+        DbgPrint(TRACE_LEVEL_FATAL,
+                 ("%s destroying ctx_id=%u owner_pid=%p owner_process=%p\n",
+                  __FUNCTION__,
+                  pDxContext->GetId(),
+                  pDxContext->GetOwnerProcessId(),
+                  pDxContext->GetOwnerProcess()));
         delete pDxContext;
     }
 

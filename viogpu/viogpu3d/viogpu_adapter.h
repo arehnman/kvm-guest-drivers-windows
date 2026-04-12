@@ -112,6 +112,10 @@ class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
 
     LIST_ENTRY m_ctrlStageReadyList;
     KSPIN_LOCK m_ctrlStageListLock;
+    static const UINT kMaxTrackedNodes = 8;
+    static const UINT kMaxTrackedEngines = 8;
+    volatile LONG m_lastNotifiedFence[kMaxTrackedNodes][kMaxTrackedEngines];
+    volatile LONG m_outOfOrderFenceDropCount;
     CAPSET_INFO m_capsetInfos[VIRTIO_GPU_MAX_CAPSET_ID + 1];
 
   public:
@@ -274,6 +278,11 @@ class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
     VOID CtrlStagePushFromIsr(PGPU_VBUFFER buf, UINT len);
     BOOLEAN CtrlStagePopForDpc(PGPU_VBUFFER *buf, UINT *len);
     VOID ProcessCtrlQueueBuffer(PGPU_VBUFFER pvbuf, UINT len);
+    BOOLEAN ShouldNotifyDmaFence(UINT fenceId,
+                                 UINT nodeOrdinal,
+                                 UINT engineOrdinal,
+                                 ULONG ctxId,
+                                 HANDLE ownerPid);
 
     UINT64 RequestParameter(ULONG parmeter);
 };
