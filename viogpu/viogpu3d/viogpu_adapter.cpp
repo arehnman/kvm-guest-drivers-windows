@@ -1430,7 +1430,7 @@ NTSTATUS VioGpuAdapter::GetRegisterInfo(void)
 
     value = 0;
     Status = ReadRegistryDWORD(DevInstRegKeyHandle, L"UsePhysicalMemory", &value);
-    if (!NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status))
     {
         SetUsePhysicalMemory(!!value);
     }
