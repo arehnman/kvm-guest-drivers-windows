@@ -54,6 +54,9 @@ class VioGpuCommand
         return m_EngineOrdinal;
     }
 
+    ULONG GetContextId() const;
+    HANDLE GetOwnerProcessId() const;
+
     BOOLEAN OnPacketCompletedFromIsr(UINT *fenceId, UINT *nodeOrdinal, UINT *engineOrdinal);
 
   private:
@@ -71,6 +74,10 @@ class VioGpuCommand
     LONG m_done = 0;
     LONG m_isrPendingPackets = 0;
     VioGpuCommand **m_pPrivateDataSlot = NULL;
+    BOOLEAN m_expectedEmptySubmit = FALSE;
+    BOOLEAN m_submitPaging = FALSE;
+    UINT m_submitFlagsValue = 0;
+    LONG m_dmaNotified = 0;
 
     VioGpuAllocation **m_allocations;
     UINT m_allocationsLength;

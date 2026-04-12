@@ -71,6 +71,11 @@ typedef struct _CTRLQUEUE_SYNCEXEC_CONTEXT
     BOOLEAN routineRet;
 } CTRLQUEUE_SYNCEXEC_CONTEXT, *PCTRLQUEUE_SYNCEXEC_CONTEXT;
 
+static __forceinline BOOLEAN IsFenceStrictlyNewer(UINT candidateFence, UINT lastFence)
+{
+    return static_cast<LONG>(candidateFence - lastFence) > 0;
+}
+
 static BOOLEAN CtrlQueueSyncExecRoutine(PVOID ctxVoid)
 {
     PCTRLQUEUE_SYNCEXEC_CONTEXT ctx = (PCTRLQUEUE_SYNCEXEC_CONTEXT)ctxVoid;
@@ -143,6 +148,8 @@ VioGpuAdapter::VioGpuAdapter(_In_ DEVICE_OBJECT *pPhysicalDeviceObject)
     m_Id = g_InstanceId++;
     m_shmem_allocator.Init(0);
     m_PendingWorks = 0;
+    RtlZeroMemory((void *)m_lastNotifiedFence, sizeof(m_lastNotifiedFence));
+    m_outOfOrderFenceDropCount = 0;
     KeInitializeEvent(&m_ConfigUpdateEvent, SynchronizationEvent, FALSE);
     m_bStopWorkThread = FALSE;
     m_pWorkThread = NULL;
@@ -1023,6 +1030,55 @@ PAGED_CODE_SEG_END
 #pragma code_seg(push)
 #pragma code_seg()
 
+BOOLEAN VioGpuAdapter::ShouldNotifyDmaFence(UINT fenceId,
+                                            UINT nodeOrdinal,
+                                            UINT engineOrdinal,
+                                            ULONG ctxId,
+                                            HANDLE ownerPid)
+{
+    if (nodeOrdinal >= kMaxTrackedNodes || engineOrdinal >= kMaxTrackedEngines)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s fence=%u node=%u engine=%u out of tracked range; notify without monotonic check ctx_id=%u owner_pid=%p\n",
+                  __FUNCTION__,
+                  fenceId,
+                  nodeOrdinal,
+                  engineOrdinal,
+                  ctxId,
+                  ownerPid));
+        return TRUE;
+    }
+
+    volatile LONG *slot = &m_lastNotifiedFence[nodeOrdinal][engineOrdinal];
+    LONG observed = InterlockedExchangeAdd(slot, 0);
+    UINT lastFence = static_cast<UINT>(observed);
+
+    while (lastFence == 0 || IsFenceStrictlyNewer(fenceId, lastFence))
+    {
+        LONG previous = InterlockedCompareExchange(slot, static_cast<LONG>(fenceId), observed);
+        if (previous == observed)
+        {
+            return TRUE;
+        }
+
+        observed = previous;
+        lastFence = static_cast<UINT>(observed);
+    }
+
+    LONG dropCount = InterlockedIncrement(&m_outOfOrderFenceDropCount);
+    DbgPrint(TRACE_LEVEL_WARNING,
+             ("%s stale/duplicate DMA completion observed (filtered) fence=%u last_notified=%u node=%u engine=%u ctx_id=%u owner_pid=%p count=%ld\n",
+              __FUNCTION__,
+              fenceId,
+              lastFence,
+              nodeOrdinal,
+              engineOrdinal,
+              ctxId,
+              ownerPid,
+              dropCount));
+    return FALSE;
+}
+
 VOID VioGpuAdapter::CtrlStagePushFromIsr(PGPU_VBUFFER buf, UINT len)
 {
     buf->isr_stage_len = len;
@@ -1096,6 +1152,7 @@ VOID VioGpuAdapter::DpcRoutine(VOID)
     PGPU_VBUFFER pvbuf = NULL;
     UINT len = 0;
     ULONG reason;
+
     while ((reason = InterlockedExchange((PLONG)&m_PendingWorks, 0)) != 0)
     {
         if ((reason & ISR_REASON_DISPLAY))
@@ -1896,12 +1953,17 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
                     UINT engineOrdinal = 0;
                     if (cmd->OnPacketCompletedFromIsr(&fenceId, &nodeOrdinal, &engineOrdinal))
                     {
-                        DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};
-                        interrupt.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
-                        interrupt.DmaCompleted.SubmissionFenceId = fenceId;
-                        interrupt.DmaCompleted.NodeOrdinal = nodeOrdinal;
-                        interrupt.DmaCompleted.EngineOrdinal = engineOrdinal;
-                        m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
+                        ULONG ctxId = cmd->GetContextId();
+                        HANDLE ownerPid = cmd->GetOwnerProcessId();
+                        if (ShouldNotifyDmaFence(fenceId, nodeOrdinal, engineOrdinal, ctxId, ownerPid))
+                        {
+                            DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};
+                            interrupt.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
+                            interrupt.DmaCompleted.SubmissionFenceId = fenceId;
+                            interrupt.DmaCompleted.NodeOrdinal = nodeOrdinal;
+                            interrupt.DmaCompleted.EngineOrdinal = engineOrdinal;
+                            m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
+                        }
                     }
                 }
 

@@ -35,6 +35,10 @@ void VioGpuCommand::PrepareSubmit(const DXGKARG_SUBMITCOMMAND *pSubmitCommand)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s", __FUNCTION__));
 
+    InterlockedExchange(&m_done, 0);
+    InterlockedExchange(&m_isrPendingPackets, 0);
+    InterlockedExchange(&m_dmaNotified, 0);
+
     m_FenceId = pSubmitCommand->SubmissionFenceId;
     m_EngineOrdinal = pSubmitCommand->EngineOrdinal;
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WIN8)
@@ -42,12 +46,36 @@ void VioGpuCommand::PrepareSubmit(const DXGKARG_SUBMITCOMMAND *pSubmitCommand)
 #else
     m_NodeOrdinal = 0;
 #endif
+    m_submitFlagsValue = pSubmitCommand->Flags.Value;
+    m_submitPaging = pSubmitCommand->Flags.Paging ? TRUE : FALSE;
+    m_expectedEmptySubmit = (pSubmitCommand->Flags.Paging != 0) &&
+                            (pSubmitCommand->DmaBufferSubmissionEndOffset <=
+                             pSubmitCommand->DmaBufferSubmissionStartOffset);
     if (m_pDmaBuffer)
     {
         m_pCommand = (char *)m_pDmaBuffer + pSubmitCommand->DmaBufferSubmissionStartOffset;
         m_pEnd = (char *)m_pDmaBuffer + pSubmitCommand->DmaBufferSubmissionEndOffset;
     }
+    else
+    {
+        m_pCommand = NULL;
+        m_pEnd = NULL;
+    }
     m_pContext = reinterpret_cast<VioGpuDevice *>(pSubmitCommand->hContext);
+
+    DbgPrint(TRACE_LEVEL_VERBOSE,
+             ("%s cmd=%p fence=%u node=%u engine=%u hContext=%p ctx_id=%u dma=%p start=0x%x end=0x%x priv=%p\n",
+              __FUNCTION__,
+              this,
+              m_FenceId,
+              m_NodeOrdinal,
+              m_EngineOrdinal,
+              m_pContext,
+              m_pContext ? m_pContext->GetId() : 0,
+              m_pDmaBuffer,
+              pSubmitCommand->DmaBufferSubmissionStartOffset,
+              pSubmitCommand->DmaBufferSubmissionEndOffset,
+              pSubmitCommand->pDmaBufferPrivateData));
 }
 
 void VioGpuCommand::Run()
@@ -58,17 +86,65 @@ void VioGpuCommand::Run()
 
     if (!m_pCommand || !m_pEnd || m_pCommand >= m_pEnd)
     {
-        DbgPrint(TRACE_LEVEL_WARNING, ("%s cmd=%p WARNING empty dma buffer\n", __FUNCTION__, this));
-        if (m_pContext)
+        if (m_expectedEmptySubmit)
         {
-            InterlockedIncrement(&m_isrPendingPackets);
-            InterlockedIncrement(&m_done);
-            m_pAdapter->ctrlQueue.SubmitCommand(0,
-                                                0,
-                                                m_pContext->GetId(),
-                                                VioGpuCommand::RunningCbDone,
-                                                this);
+            DbgPrint(TRACE_LEVEL_VERBOSE,
+                     ("%s cmd=%p empty paging dma submit (fence-only) fence=%u node=%u engine=%u submit_flags=0x%x paging=%u hContext=%p ctx_id=%u owner_pid=%p cmd_ptr=%p end_ptr=%p\n",
+                      __FUNCTION__,
+                      this,
+                      m_FenceId,
+                      m_NodeOrdinal,
+                      m_EngineOrdinal,
+                      m_submitFlagsValue,
+                      m_submitPaging ? 1 : 0,
+                      m_pContext,
+                      m_pContext ? m_pContext->GetId() : 0,
+                      m_pContext ? m_pContext->GetOwnerProcessId() : 0,
+                      m_pCommand,
+                      m_pEnd));
         }
+        else
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s cmd=%p WARNING unexpected empty dma buffer fence=%u node=%u engine=%u submit_flags=0x%x paging=%u hContext=%p ctx_id=%u owner_pid=%p cmd_ptr=%p end_ptr=%p\n",
+                      __FUNCTION__,
+                      this,
+                      m_FenceId,
+                      m_NodeOrdinal,
+                      m_EngineOrdinal,
+                      m_submitFlagsValue,
+                      m_submitPaging ? 1 : 0,
+                      m_pContext,
+                      m_pContext ? m_pContext->GetId() : 0,
+                      m_pContext ? m_pContext->GetOwnerProcessId() : 0,
+                      m_pCommand,
+                      m_pEnd));
+        }
+
+        /* Keep fence completion ordering consistent with non-empty submits.
+         * Immediate software completion can overtake older pending fences and
+         * trigger VIDEO_SCHEDULER_INTERNAL_ERROR(0x119, Arg1=1).
+         */
+        InterlockedIncrement(&m_isrPendingPackets);
+        InterlockedIncrement(&m_done);
+        UINT ret = m_pAdapter->ctrlQueue.SubmitNop(VioGpuCommand::RunningCbDone,
+                                                   this,
+                                                   FALSE /* non-blocking */,
+                                                   TRUE /* fenced */);
+        if (ret)
+        {
+            DbgPrint(TRACE_LEVEL_FATAL,
+                     ("%s cmd=%p failed to queue empty submit (non-blocking) fence=%u node=%u engine=%u ret=%u\n",
+                      __FUNCTION__,
+                      this,
+                      m_FenceId,
+                      m_NodeOrdinal,
+                      m_EngineOrdinal,
+                      ret));
+            InterlockedExchange(&m_isrPendingPackets, 0);
+            VioGpuCommand::VioGpuCommandDone();
+        }
+
         VioGpuCommand::VioGpuCommandDone();
         return;
     }
@@ -162,6 +238,16 @@ void VioGpuCommand::Run()
     VioGpuCommand::VioGpuCommandDone();
 }
 
+ULONG VioGpuCommand::GetContextId() const
+{
+    return m_pContext ? m_pContext->GetId() : 0;
+}
+
+HANDLE VioGpuCommand::GetOwnerProcessId() const
+{
+    return m_pContext ? m_pContext->GetOwnerProcessId() : NULL;
+}
+
 #pragma code_seg(pop)
 PAGED_CODE_SEG_BEGIN
 
@@ -237,6 +323,20 @@ BOOLEAN VioGpuCommand::OnPacketCompletedFromIsr(UINT *fenceId, UINT *nodeOrdinal
                   this,
                   m_FenceId));
         InterlockedExchange(&m_isrPendingPackets, 0);
+        return FALSE;
+    }
+
+    if (InterlockedCompareExchange(&m_dmaNotified, 1, 0) != 0)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s cmd=%p duplicate DMA completion suppressed fence_id=%u node=%u engine=%u ctx_id=%u owner_pid=%p\n",
+                  __FUNCTION__,
+                  this,
+                  m_FenceId,
+                  m_NodeOrdinal,
+                  m_EngineOrdinal,
+                  GetContextId(),
+                  GetOwnerProcessId()));
         return FALSE;
     }
 
@@ -319,22 +419,82 @@ NTSTATUS VioGpuCommander::SubmitCommand(const DXGKARG_SUBMITCOMMAND *pSubmitComm
 {
     VIOGPU_ASSERT(pSubmitCommand != NULL);
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s fence_id=%d\n", __FUNCTION__, pSubmitCommand->SubmissionFenceId));
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WIN8)
+    UINT nodeOrdinal = pSubmitCommand->NodeOrdinal;
+#else
+    UINT nodeOrdinal = 0;
+#endif
+
+    DbgPrint(TRACE_LEVEL_VERBOSE,
+             ("---> %s fence_id=%u node=%u engine=%u hContext=%p start=0x%x end=0x%x priv=%p\n",
+              __FUNCTION__,
+              pSubmitCommand->SubmissionFenceId,
+              nodeOrdinal,
+              pSubmitCommand->EngineOrdinal,
+              pSubmitCommand->hContext,
+              pSubmitCommand->DmaBufferSubmissionStartOffset,
+              pSubmitCommand->DmaBufferSubmissionEndOffset,
+              pSubmitCommand->pDmaBufferPrivateData));
 
     VioGpuCommand *cmd = NULL;
+    VioGpuCommand **privSlot = NULL;
     if (pSubmitCommand->pDmaBufferPrivateData)
     {
-        VioGpuCommand **priv = (VioGpuCommand **)pSubmitCommand->pDmaBufferPrivateData;
-        if (*priv != NULL)
+        privSlot = (VioGpuCommand **)pSubmitCommand->pDmaBufferPrivateData;
+        cmd = reinterpret_cast<VioGpuCommand *>(
+            InterlockedExchangePointer((PVOID volatile *)privSlot, NULL));
+        if (cmd)
         {
-            cmd = *priv;
+            // This command object is consumed by this SubmitCommand invocation.
+            // Prevent slot-based reuse across concurrent/duplicate submissions.
+            cmd->SetPrivateDataSlot(NULL);
+        }
+        else
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s private slot already empty fence_id=%u node=%u engine=%u hContext=%p priv_slot=%p\n",
+                      __FUNCTION__,
+                      pSubmitCommand->SubmissionFenceId,
+                      nodeOrdinal,
+                      pSubmitCommand->EngineOrdinal,
+                      pSubmitCommand->hContext,
+                      privSlot));
         }
     }
 
     if (!cmd)
     {
         cmd = new (NonPagedPoolNx) VioGpuCommand(m_pAdapter);
-        DbgPrint(TRACE_LEVEL_WARNING, ("%s EMPTY cmd=%p\n", __FUNCTION__, cmd));
+        if (!cmd)
+        {
+            DbgPrint(TRACE_LEVEL_ERROR,
+                     ("%s failed to allocate command object fence_id=%u hContext=%p\n",
+                      __FUNCTION__,
+                      pSubmitCommand->SubmissionFenceId,
+                      pSubmitCommand->hContext));
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        DbgPrint(TRACE_LEVEL_VERBOSE,
+                 ("%s created command object cmd=%p fence_id=%u hContext=%p submit_flags=0x%x start=0x%x end=0x%x priv=%p\n",
+                  __FUNCTION__,
+                  cmd,
+                  pSubmitCommand->SubmissionFenceId,
+                  pSubmitCommand->hContext,
+                  pSubmitCommand->Flags.Value,
+                  pSubmitCommand->DmaBufferSubmissionStartOffset,
+                  pSubmitCommand->DmaBufferSubmissionEndOffset,
+                  pSubmitCommand->pDmaBufferPrivateData));
+    }
+    else
+    {
+        DbgPrint(TRACE_LEVEL_VERBOSE,
+                 ("%s consumed private command cmd=%p fence_id=%u hContext=%p priv_slot=%p\n",
+                  __FUNCTION__,
+                  cmd,
+                  pSubmitCommand->SubmissionFenceId,
+                  pSubmitCommand->hContext,
+                  privSlot));
     }
 
     cmd->PrepareSubmit(pSubmitCommand);
