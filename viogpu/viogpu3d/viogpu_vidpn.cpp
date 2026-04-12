@@ -119,6 +119,9 @@ NTSTATUS VioGpuVidPN::Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren)
              ("<--- %s ColorFormat = %d\n", __FUNCTION__, m_CurrentModes[0].DispInfo.ColorFormat));
 
     InterlockedExchange(&m_shouldFlipStop, 0);
+    InterlockedExchange(&m_sourceAddressQueueHead, 0);
+    InterlockedExchange(&m_sourceAddressQueueTail, 0);
+    InterlockedExchange(&m_sourceQueueFullCount, 0);
     KeInitializeTimerEx(&m_vsyncNotifyTimer, SynchronizationTimer);
     KeInitializeDpc(&m_vsyncNotifyDpc, VioGpuVidPN::VsyncNotifyTimerDpc, this);
     m_timerRes = ExSetTimerResolution(10000, TRUE);
@@ -2023,11 +2026,13 @@ BOOLEAN VioGpuVidPN::QueueSourceAddress(PHYSICAL_ADDRESS address)
         return FALSE;
     }
 
-    LONG slot = tail & (kSourceAddressQueueSize-1);
+    LONG slot = tail & (kSourceAddressQueueSize - 1);
     m_sourceAddressQueue[slot] = address;
     m_lastQueuedSourceAddress = address;
     KeMemoryBarrier();
+
     InterlockedExchange(&m_sourceAddressQueueTail, tail + 1);
+
     return TRUE;
 }
 
@@ -2044,7 +2049,7 @@ BOOLEAN VioGpuVidPN::DequeueSourceAddress(PHYSICAL_ADDRESS *address)
     LONG slot = head & (kSourceAddressQueueSize-1);
     *address = m_sourceAddressQueue[slot];
     KeMemoryBarrier();
-    InterlockedExchange(&m_sourceAddressQueueHead, head + 1);
+    InterlockedCompareExchange(&m_sourceAddressQueueHead, head + 1, head);
     return TRUE;
 }
 
@@ -2090,9 +2095,11 @@ NTSTATUS VioGpuVidPN::SetVidPnSourceAddress(const DXGKARG_SETVIDPNSOURCEADDRESS 
     m_sourceRes = reinterpret_cast<VioGpuAllocation *>(pSetVidPnSourceAddress->hAllocation);
     if (!QueueSourceAddress(m_sourceAddress))
     {
+        LONG fullCount = InterlockedIncrement(&m_sourceQueueFullCount);
         DbgPrint(TRACE_LEVEL_WARNING,
-                 ("%s source queue full source=0x%llx alloc=%p last_queued=0x%llx\n",
+                 ("%s source queue full[%ld] source=0x%llx alloc=%p last_queued=0x%llx\n",
                   __FUNCTION__,
+                  fullCount,
                   m_sourceAddress.QuadPart,
                   m_sourceRes,
                   m_lastQueuedSourceAddress.QuadPart));

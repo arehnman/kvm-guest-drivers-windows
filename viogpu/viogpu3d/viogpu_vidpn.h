@@ -165,4 +165,5 @@ class VioGpuVidPN
     volatile LONG m_sourceAddressQueueHead = 0;
     volatile LONG m_sourceAddressQueueTail = 0;
     PHYSICAL_ADDRESS m_lastQueuedSourceAddress = {0};
+    volatile LONG m_sourceQueueFullCount = 0;
 };
