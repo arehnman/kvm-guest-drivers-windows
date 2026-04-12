@@ -109,6 +109,8 @@ class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
 
     ULONG m_Id;
     volatile LONG m_VsyncInterruptEnabled;
+    LARGE_INTEGER m_vsyncNotifyLastQpc = {};
+    LARGE_INTEGER m_vsyncNotifyMinInterval = {};
 
     LIST_ENTRY m_ctrlStageReadyList;
     KSPIN_LOCK m_ctrlStageListLock;
