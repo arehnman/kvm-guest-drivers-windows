@@ -353,8 +353,6 @@ NTSTATUS VioGpuAdapter::SetPowerState(_In_ ULONG HardwareUid,
 {
     PAGED_CODE();
 
-    UNREFERENCED_PARAMETER(ActionType);
-
     DbgPrint(TRACE_LEVEL_FATAL,
              ("---> %s HardwareUid = 0x%x ActionType = %s DevicePowerState = %s AdapterPowerState = %s\n",
               __FUNCTION__,
@@ -365,18 +363,31 @@ NTSTATUS VioGpuAdapter::SetPowerState(_In_ ULONG HardwareUid,
 
     if (HardwareUid == DISPLAY_ADAPTER_HW_ID)
     {
+        NTSTATUS status = STATUS_SUCCESS;
+
         if (DevicePowerState == PowerDeviceD0)
         {
-            vidpn.AcquirePostDisplayOwnership();
+            status = vidpn.AcquirePostDisplayOwnership();
+            if (!NT_SUCCESS(status))
+            {
+                DbgPrint(TRACE_LEVEL_ERROR,
+                         ("%s AcquirePostDisplayOwnership failed: 0x%x\n", __FUNCTION__, status));
+                return status;
+            }
 
             if (m_AdapterPowerState == PowerDeviceD3)
             {
                 DXGKARG_SETVIDPNSOURCEVISIBILITY Visibility;
                 Visibility.VidPnSourceId = D3DDDI_ID_ALL;
                 Visibility.Visible = FALSE;
-                vidpn.SetVidPnSourceVisibility(&Visibility);
+                status = vidpn.SetVidPnSourceVisibility(&Visibility);
+                if (!NT_SUCCESS(status))
+                {
+                    DbgPrint(TRACE_LEVEL_ERROR,
+                             ("%s SetVidPnSourceVisibility failed: 0x%x\n", __FUNCTION__, status));
+                    return status;
+                }
             }
-            m_AdapterPowerState = DevicePowerState;
         }
 
         switch (DevicePowerState)
@@ -384,7 +395,7 @@ NTSTATUS VioGpuAdapter::SetPowerState(_In_ ULONG HardwareUid,
             case PowerDeviceUnspecified:
             case PowerDeviceD0:
                 {
-                    VioGpuAdapterInit();
+                    status = VioGpuAdapterInit();
                 }
                 break;
             case PowerDeviceD1:
@@ -395,7 +406,21 @@ NTSTATUS VioGpuAdapter::SetPowerState(_In_ ULONG HardwareUid,
                     VioGpuAdapterClose();
                 }
                 break;
+            default:
+                return STATUS_INVALID_PARAMETER;
         }
+
+        if (!NT_SUCCESS(status))
+        {
+            DbgPrint(TRACE_LEVEL_ERROR,
+                     ("%s failed to switch to %s: 0x%x\n",
+                      __FUNCTION__,
+                      DbgDevicePowerString(DevicePowerState),
+                      status));
+            return status;
+        }
+
+        m_AdapterPowerState = DevicePowerState;
         return STATUS_SUCCESS;
     }
     return STATUS_SUCCESS;
@@ -1974,18 +1999,16 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
         {
             LARGE_INTEGER freq;
             LARGE_INTEGER now = KeQueryPerformanceCounter(&freq);
-            static LARGE_INTEGER last;
-            static LARGE_INTEGER mininterval;
 
-            if (mininterval.QuadPart == 0)
+            if (m_vsyncNotifyMinInterval.QuadPart == 0)
             {
-                mininterval.QuadPart = freq.QuadPart / 80;
+                m_vsyncNotifyMinInterval.QuadPart = freq.QuadPart / 80;
             }
 
             if ((InterlockedExchange(&vidpn.m_vsync, 0)) &&
-                ((now.QuadPart - last.QuadPart) > mininterval.QuadPart))
+                now.QuadPart - m_vsyncNotifyLastQpc.QuadPart > m_vsyncNotifyMinInterval.QuadPart)
             {
-                last = now;
+                m_vsyncNotifyLastQpc = now;
                 PHYSICAL_ADDRESS sourceAddress = {};
                 vidpn.DequeueSourceAddress(&sourceAddress);
                 DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};

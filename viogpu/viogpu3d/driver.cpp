@@ -1010,14 +1010,14 @@ APIENTRY
 VioGpu3DDdiPreemptCommand(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_PREEMPTCOMMAND *pPreemptCommand)
 {
     UNREFERENCED_PARAMETER(hAdapter);
-    UNREFERENCED_PARAMETER(pPreemptCommand);
+    UINT fenceId = pPreemptCommand ? pPreemptCommand->PreemptionFenceId : 0;
 
     DbgPrint(TRACE_LEVEL_ERROR,
              ("<---> %s UNSUPPORTED PREEMPTION FUNCTION fence_id=%d\n",
               __FUNCTION__,
-              pPreemptCommand->PreemptionFenceId));
+              fenceId));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 NTSTATUS
@@ -1027,7 +1027,7 @@ VioGpu3DDdiRestartFromTimeout(_In_ CONST HANDLE hAdapter)
     UNREFERENCED_PARAMETER(hAdapter);
     DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s UNSUPPORTED PREEMPTION FUNCTION\n", __FUNCTION__));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 NTSTATUS
@@ -1039,7 +1039,7 @@ VioGpu3DDdiCancelCommand(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_CANCELCO
 
     DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s UNSUPPORTED PREEMPTION FUNCTION\n", __FUNCTION__));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 NTSTATUS
@@ -1047,11 +1047,15 @@ APIENTRY
 VioGpu3DDdiQueryCurrentFence(_In_ CONST HANDLE hAdapter, _Inout_ DXGKARG_QUERYCURRENTFENCE *pCurrentFence)
 {
     UNREFERENCED_PARAMETER(hAdapter);
-    UNREFERENCED_PARAMETER(pCurrentFence);
+
+    if (pCurrentFence)
+    {
+        RtlZeroMemory(pCurrentFence, sizeof(*pCurrentFence));
+    }
 
     DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s UNSUPPORTED PREEMPTION FUNCTION\n", __FUNCTION__));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 NTSTATUS
@@ -1063,7 +1067,7 @@ VioGpu3DDdiResetEngine(_In_ CONST HANDLE hAdapter, _Inout_ DXGKARG_RESETENGINE *
 
     DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s UNSUPPORTED PREEMPTION FUNCTION\n", __FUNCTION__));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 NTSTATUS
@@ -1075,7 +1079,7 @@ VioGpu3DDdiQueryEngineStatus(_In_ CONST HANDLE hAdapter, _Inout_ DXGKARG_QUERYEN
 
     DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s UNSUPPORTED PREEMPTION FUNCTION\n", __FUNCTION__));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 NTSTATUS
@@ -1087,7 +1091,7 @@ VioGpu3DDdiCollectDbgInfo(_In_ CONST HANDLE hAdapter, _In_ CONST DXGKARG_COLLECT
 
     DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s UNSUPPORTED PREEMPTION FUNCTION\n", __FUNCTION__));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 NTSTATUS
@@ -1098,7 +1102,7 @@ VioGpu3DDdiResetFromTimeout(_In_ CONST HANDLE hAdapter)
 
     DbgPrint(TRACE_LEVEL_ERROR, ("<---> %s UNSUPPORTED PREEMPTION FUNCTION\n", __FUNCTION__));
 
-    return STATUS_SUCCESS;
+    return STATUS_NOT_SUPPORTED;
 };
 
 #if defined(DBG)
