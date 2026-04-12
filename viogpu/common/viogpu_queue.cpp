@@ -341,6 +341,12 @@ BOOLEAN CtrlQueue::AskCapsetInfo(PGPU_VBUFFER *buf, ULONG idx)
     cmd->capset_index = idx;
     cmd->padding = 0;
 
+    DbgPrint(TRACE_LEVEL_VERBOSE,
+             ("%s queue GET_CAPSET_INFO index=%lu cmd_type=0x%x\n",
+              __FUNCTION__,
+              idx,
+              cmd->hdr.type));
+
     KeInitializeEvent(&event, NotificationEvent, FALSE);
     vbuf->complete_cb = NotifyEventCompleteCB;
     vbuf->complete_ctx = &event;
@@ -355,8 +361,11 @@ BOOLEAN CtrlQueue::AskCapsetInfo(PGPU_VBUFFER *buf, ULONG idx)
 
     if (status == STATUS_TIMEOUT)
     {
-        DbgPrint(TRACE_LEVEL_FATAL, ("---> Failed to get capset info\n"));
-        VioGpuDbgBreak();
+        DbgPrint(TRACE_LEVEL_ERROR,
+                 ("%s timeout waiting capset info index=%lu status=0x%x\n",
+                  __FUNCTION__,
+                  idx,
+                  status));
         ReleaseBuffer(vbuf);
         if (buf)
         {
@@ -364,6 +373,27 @@ BOOLEAN CtrlQueue::AskCapsetInfo(PGPU_VBUFFER *buf, ULONG idx)
         }
         return FALSE;
     }
+
+    PGPU_RESP_CAPSET_INFO resp = reinterpret_cast<PGPU_RESP_CAPSET_INFO>(vbuf->resp_buf);
+    if (!resp)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s null response buffer for capset index=%lu\n", __FUNCTION__, idx));
+        ReleaseBuffer(vbuf);
+        if (buf)
+        {
+            *buf = NULL;
+        }
+        return FALSE;
+    }
+
+    DbgPrint(TRACE_LEVEL_VERBOSE,
+             ("%s capset index=%lu resp_type=0x%x capset_id=%lu max_ver=%lu max_size=%lu\n",
+              __FUNCTION__,
+              idx,
+              resp->hdr.type,
+              resp->capset_id,
+              resp->capset_max_version,
+              resp->capset_max_size));
 
     *buf = vbuf;
 
@@ -697,7 +727,20 @@ void CtrlQueue::ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y)
     cmd->r.x = x;
     cmd->r.y = y;
 
-    QueueBufferFenced(vbuf);
+    UINT ret = QueueBufferFenced(vbuf);
+    if (ret)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s failed to queue flush res=%u rect=%ux%u+%u+%u ret=%u\n",
+                  __FUNCTION__,
+                  res_id,
+                  width,
+                  height,
+                  x,
+                  y,
+                  ret));
+        ReleaseBuffer(vbuf);
+    }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -722,7 +765,21 @@ void CtrlQueue::TransferToHost2D(UINT res_id, ULONG offset, UINT width, UINT hei
     cmd->r.x = x;
     cmd->r.y = y;
 
-    QueueBufferFenced(vbuf);
+    UINT ret = QueueBufferFenced(vbuf);
+    if (ret)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s failed to queue transfer2d res=%u offset=%lu rect=%ux%u+%u+%u ret=%u\n",
+                  __FUNCTION__,
+                  res_id,
+                  offset,
+                  width,
+                  height,
+                  x,
+                  y,
+                  ret));
+        ReleaseBuffer(vbuf);
+    }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -746,7 +803,22 @@ void CtrlQueue::TransferToHost3D(UINT res_id, GPU_BOX *box)
 
     memcpy(&cmd->box, box, sizeof(GPU_BOX));
 
-    QueueBufferFenced(vbuf);
+    UINT ret = QueueBufferFenced(vbuf);
+    if (ret)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s failed to queue transfer3d res=%u box=%ux%ux%u@%u,%u,%u ret=%u\n",
+                  __FUNCTION__,
+                  res_id,
+                  box->width,
+                  box->height,
+                  box->depth,
+                  box->x,
+                  box->y,
+                  box->z,
+                  ret));
+        ReleaseBuffer(vbuf);
+    }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -968,8 +1040,23 @@ void CtrlQueue::SetScanout(UINT scan_id, UINT res_id, UINT width, UINT height, U
     cmd->r.x = x;
     cmd->r.y = y;
 
-    // FIXME if
-    QueueBuffer(vbuf);
+    // During session transitions (e.g. remote disconnect), waiting indefinitely for
+    // queue space can stall win32k/dxgkrnl callers. Keep this submission non-blocking.
+    UINT ret = QueueBuffer(vbuf, FALSE);
+    if (ret)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s failed to queue set_scanout scan=%u res=%u rect=%ux%u+%u+%u ret=%u\n",
+                  __FUNCTION__,
+                  scan_id,
+                  res_id,
+                  width,
+                  height,
+                  x,
+                  y,
+                  ret));
+        ReleaseBuffer(vbuf);
+    }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
@@ -1096,6 +1183,10 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking)
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s sgleft %d\n", __FUNCTION__, sgleft));
 
+    PGPU_CTRL_HDR hdr = reinterpret_cast<PGPU_CTRL_HDR>(buf->buf);
+    UINT add_retry = 0;
+    const UINT max_add_retry = 2000;
+
     do
     {
         ret = AddBufferSerialized(&sg[0], outcnt, incnt, buf, TRUE);
@@ -1112,10 +1203,24 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking)
         {
             break;
         }
+
+        add_retry++;
+        if (add_retry >= max_add_retry)
+        {
+            DbgPrint(TRACE_LEVEL_ERROR,
+                     ("%s giving up after %u retries cmd=0x%x ret=%u\n",
+                      __FUNCTION__,
+                      add_retry,
+                      hdr ? hdr->type : 0,
+                      ret));
+            break;
+        }
+
         LARGE_INTEGER t;
         t.QuadPart = -10000LL;
         NTSTATUS status = STATUS_SUCCESS;
-        while (status == STATUS_SUCCESS) {
+        while (status == STATUS_SUCCESS)
+        {
             status = KeWaitForSingleObject(&m_CtrlQueueEvent, Executive, KernelMode, FALSE, &t);
             if (status == STATUS_TIMEOUT)
                 DbgPrint(TRACE_LEVEL_VERBOSE, ("Waiting in QueueBuffer\n"));
