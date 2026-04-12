@@ -25,16 +25,16 @@ VioGpu3D_Files.Vulkan = 11 ; system32
 
 [SourceDisksFiles]
 viogpu3d.sys = 1,,f
-viogpu_d3d10.dll = 1,,
-viogpu_wgl.dll = 1,,
-libEGL.dll = 1,,
-libGLESv1_CM.dll = 1,,
-libGLESv2.dll = 1,,
-libvulkan_virtio.dll = 1,,
-opengl32.dll = 1,,
-vulkan_lvp.dll = 1,,
-lvp_icd.x86_64.json = 1,,
-virtio_icd.x86_64.json = 1,,
+viogpu_d3d10_arm64.dll = 1,arm64,
+viogpu_wgl_arm64.dll = 1,arm64,
+libEGL_arm64.dll = 1,arm64,
+libGLESv1_CM_arm64.dll = 1,arm64,
+libGLESv2_arm64.dll = 1,arm64,
+libvulkan_virtio_arm64.dll = 1,arm64,
+opengl32_arm64.dll = 1,arm64,
+vulkan_lvp_arm64.dll = 1,arm64,
+lvp_icd.aarch64.json = 1,arm64,
+virtio_icd.aarch64.json = 1,arm64,
 [Manufacturer]
 %HARDSOFT%=HARDSOFT,NT$ARCH$...16299
 [HARDSOFT.NT$ARCH$...16299]
@@ -43,17 +43,17 @@ virtio_icd.x86_64.json = 1,,
 viogpu3d.sys,,,2
 
 [VioGpu3D_Files.Usermode]
-viogpu_d3d10.dll,,,0
-viogpu_wgl.dll,,,0
-libEGL.dll,,,0
-libGLESv1_CM.dll,,,0
-libGLESv2.dll,,,0
-opengl32.dll,,,0
+viogpu_d3d10.dll,viogpu_d3d10_arm64.dll,,0
+viogpu_wgl.dll,viogpu_wgl_arm64.dll,,0
+libEGL.dll,libEGL_arm64.dll,,0
+libGLESv1_CM.dll,libGLESv1_CM_arm64.dll,,0
+libGLESv2.dll,libGLESv2_arm64.dll,,0
+opengl32.dll,opengl32_arm64.dll,,0
 [VioGpu3D_Files.Vulkan]
-libvulkan_virtio.dll,,,0
-vulkan_lvp.dll,,,0
-lvp_icd.x86_64.json,,,0
-virtio_icd.x86_64.json,,,0
+libvulkan_virtio.dll,libvulkan_virtio_arm64.dll,,0
+vulkan_lvp.dll,vulkan_lvp_arm64.dll,,0
+lvp_icd.aarch64.json,,,0
+virtio_icd.aarch64.json,,,0
 [VioGpu3D_Inst.NT]
 Include=msdv.inf
 FeatureScore=F9
@@ -89,8 +89,8 @@ HKR,, OpenGLVersion,               %REG_DWORD%, 4096
 HKR,, InstalledDisplayDrivers,     %REG_MULTI_SZ%, viogpu_d3d10,viogpu_d3d10,viogpu_d3d10
 
 
-HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\lvp_icd.x86_64.json",%REG_DWORD%,0
-HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\virtio_icd.x86_64.json",%REG_DWORD%,0
+HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\lvp_icd.aarch64.json",%REG_DWORD%,0
+HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\virtio_icd.aarch64.json",%REG_DWORD%,0
 HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler",EnablePreemption,%REG_DWORD%,0
 HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",TdrDebugMode,%REG_DWORD%,1
 
