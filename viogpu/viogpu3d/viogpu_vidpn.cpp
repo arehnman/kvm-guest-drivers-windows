@@ -518,7 +518,8 @@ NTSTATUS VioGpuVidPN::IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_SOURCE_MO
     }
     else
     {
-        if (pSourceMode->Format.Graphics.PixelFormat == D3DDDIFMT_A8R8G8B8)
+        if (pSourceMode->Format.Graphics.PixelFormat == D3DDDIFMT_A8R8G8B8 ||
+            pSourceMode->Format.Graphics.PixelFormat == D3DDDIFMT_A8B8G8R8)
         {
             return STATUS_SUCCESS;
         }
@@ -630,6 +631,10 @@ NTSTATUS VioGpuVidPN::GetModeList(DXGK_DISPLAY_INFORMATION *pDispInfo)
     DbgPrint(TRACE_LEVEL_INFORMATION, ("ModeCount filtered %d\n", m_ModeCount));
 
     GetDisplayInfo();
+    if (m_CustomModeIndex < m_ModeCount)
+    {
+        m_CurrentModeIndex = m_CustomModeIndex;
+    }
 
     for (UINT idx = 0; idx < ModeCount; idx++)
     {
@@ -910,44 +915,51 @@ NTSTATUS VioGpuVidPN::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INT
 
     for (ULONG idx = 0; idx < GetModeCount(); ++idx)
     {
-        D3DKMDT_VIDPN_SOURCE_MODE *pVidPnSourceModeInfo = NULL;
         PVIDEO_MODE_INFORMATION pModeInfo = &m_ModeInfo[idx];
-        NTSTATUS Status = pVidPnSourceModeSetInterface->pfnCreateNewModeInfo(hVidPnSourceModeSet,
-                                                                             &pVidPnSourceModeInfo);
-        if (!NT_SUCCESS(Status))
+        // Expose both BGRA and RGBA source formats so DXGI callers asking
+        // for DXGI_FORMAT_R8G8B8A8_UNORM can receive non-empty mode lists.
+        D3DDDIFORMAT pixelFormats[] = {D3DDDIFMT_A8R8G8B8, D3DDDIFMT_A8B8G8R8};
+
+        for (UINT fmtIdx = 0; fmtIdx < (sizeof(pixelFormats) / sizeof(pixelFormats[0])); ++fmtIdx)
         {
-            DbgPrint(TRACE_LEVEL_ERROR,
-                     ("pfnCreateNewModeInfo failed with Status = 0x%X, hVidPnSourceModeSet = %llu",
-                      Status,
-                      LONG_PTR(hVidPnSourceModeSet)));
-            return Status;
-        }
-
-        pVidPnSourceModeInfo->Type = D3DKMDT_RMT_GRAPHICS;
-        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cx = pModeInfo->VisScreenWidth;
-        pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cy = pModeInfo->VisScreenHeight;
-        pVidPnSourceModeInfo->Format.Graphics.VisibleRegionSize = pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize;
-        pVidPnSourceModeInfo->Format.Graphics.Stride = pModeInfo->ScreenStride;
-        pVidPnSourceModeInfo->Format.Graphics.PixelFormat = D3DDDIFMT_A8R8G8B8;
-        pVidPnSourceModeInfo->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
-        pVidPnSourceModeInfo->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
-
-        Status = pVidPnSourceModeSetInterface->pfnAddMode(hVidPnSourceModeSet, pVidPnSourceModeInfo);
-        if (!NT_SUCCESS(Status))
-        {
-            NTSTATUS TempStatus = pVidPnSourceModeSetInterface->pfnReleaseModeInfo(hVidPnSourceModeSet,
-                                                                                   pVidPnSourceModeInfo);
-            UNREFERENCED_PARAMETER(TempStatus);
-            NT_ASSERT(NT_SUCCESS(TempStatus));
-
-            if (Status != STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET)
+            D3DKMDT_VIDPN_SOURCE_MODE *pVidPnSourceModeInfo = NULL;
+            NTSTATUS Status = pVidPnSourceModeSetInterface->pfnCreateNewModeInfo(hVidPnSourceModeSet,
+                                                                                 &pVidPnSourceModeInfo);
+            if (!NT_SUCCESS(Status))
             {
                 DbgPrint(TRACE_LEVEL_ERROR,
-                         ("pfnAddMode failed with Status = 0x%X, hVidPnSourceModeSet = %llu, pVidPnSourceModeInfo = %p",
+                         ("pfnCreateNewModeInfo failed with Status = 0x%X, hVidPnSourceModeSet = %llu",
                           Status,
-                          LONG_PTR(hVidPnSourceModeSet),
-                          pVidPnSourceModeInfo));
+                          LONG_PTR(hVidPnSourceModeSet)));
                 return Status;
+            }
+
+            pVidPnSourceModeInfo->Type = D3DKMDT_RMT_GRAPHICS;
+            pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cx = pModeInfo->VisScreenWidth;
+            pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize.cy = pModeInfo->VisScreenHeight;
+            pVidPnSourceModeInfo->Format.Graphics.VisibleRegionSize = pVidPnSourceModeInfo->Format.Graphics.PrimSurfSize;
+            pVidPnSourceModeInfo->Format.Graphics.Stride = pModeInfo->ScreenStride;
+            pVidPnSourceModeInfo->Format.Graphics.PixelFormat = pixelFormats[fmtIdx];
+            pVidPnSourceModeInfo->Format.Graphics.ColorBasis = D3DKMDT_CB_SCRGB;
+            pVidPnSourceModeInfo->Format.Graphics.PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
+
+            Status = pVidPnSourceModeSetInterface->pfnAddMode(hVidPnSourceModeSet, pVidPnSourceModeInfo);
+            if (!NT_SUCCESS(Status))
+            {
+                NTSTATUS TempStatus = pVidPnSourceModeSetInterface->pfnReleaseModeInfo(hVidPnSourceModeSet,
+                                                                                       pVidPnSourceModeInfo);
+                UNREFERENCED_PARAMETER(TempStatus);
+                NT_ASSERT(NT_SUCCESS(TempStatus));
+
+                if (Status != STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET)
+                {
+                    DbgPrint(TRACE_LEVEL_ERROR,
+                             ("pfnAddMode failed with Status = 0x%X, hVidPnSourceModeSet = %llu, pVidPnSourceModeInfo = %p",
+                              Status,
+                              LONG_PTR(hVidPnSourceModeSet),
+                              pVidPnSourceModeInfo));
+                    return Status;
+                }
             }
         }
     }
@@ -963,6 +975,7 @@ VOID VioGpuVidPN::BuildVideoSignalInfo(D3DKMDT_VIDEO_SIGNAL_INFO *pVideoSignalIn
     pVideoSignalInfo->VideoStandard = D3DKMDT_VSS_OTHER;
     pVideoSignalInfo->TotalSize.cx = pModeInfo->VisScreenWidth;
     pVideoSignalInfo->TotalSize.cy = pModeInfo->VisScreenHeight;
+    pVideoSignalInfo->ActiveSize = pVideoSignalInfo->TotalSize;
 
 #if 1
     pVideoSignalInfo->VSyncFreq.Numerator = 148500000;
@@ -990,13 +1003,14 @@ NTSTATUS VioGpuVidPN::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INT
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     UNREFERENCED_PARAMETER(pVidPnPinnedSourceModeInfo);
+    UNREFERENCED_PARAMETER(SourceId);
 
     D3DKMDT_VIDPN_TARGET_MODE *pVidPnTargetModeInfo = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
 
     for (UINT ModeIndex = 0; ModeIndex < GetModeCount(); ++ModeIndex)
     {
-        PVIDEO_MODE_INFORMATION pModeInfo = &m_ModeInfo[SourceId];
+        PVIDEO_MODE_INFORMATION pModeInfo = &m_ModeInfo[ModeIndex];
         pVidPnTargetModeInfo = NULL;
         Status = pVidPnTargetModeSetInterface->pfnCreateNewModeInfo(hVidPnTargetModeSet, &pVidPnTargetModeInfo);
         if (!NT_SUCCESS(Status))
@@ -1007,7 +1021,6 @@ NTSTATUS VioGpuVidPN::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INT
                       LONG_PTR(hVidPnTargetModeSet)));
             return Status;
         }
-        pVidPnTargetModeInfo->VideoSignalInfo.ActiveSize = pVidPnTargetModeInfo->VideoSignalInfo.TotalSize;
         BuildVideoSignalInfo(&pVidPnTargetModeInfo->VideoSignalInfo, pModeInfo);
 
         pVidPnTargetModeInfo->Preference = D3DKMDT_MP_NOTPREFERRED; // TODO: another logic for prefferred mode. Maybe
