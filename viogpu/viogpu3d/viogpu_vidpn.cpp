@@ -118,15 +118,17 @@ NTSTATUS VioGpuVidPN::Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren)
     DbgPrint(TRACE_LEVEL_INFORMATION,
              ("<--- %s ColorFormat = %d\n", __FUNCTION__, m_CurrentModes[0].DispInfo.ColorFormat));
 
-    m_shouldFlipStop = false;
+    InterlockedExchange(&m_shouldFlipStop, 0);
     KeInitializeTimerEx(&m_vsyncNotifyTimer, SynchronizationTimer);
     KeInitializeDpc(&m_vsyncNotifyDpc, VioGpuVidPN::VsyncNotifyTimerDpc, this);
     m_timerRes = ExSetTimerResolution(10000, TRUE);
     {
         LARGE_INTEGER now;
+        LARGE_INTEGER due;
         KeQuerySystemTime(&now);
         next_vsync_time.QuadPart = now.QuadPart + kVsyncPeriod100ns;
-        KeSetTimerEx(&m_vsyncNotifyTimer, next_vsync_time, 0, &m_vsyncNotifyDpc);
+        due.QuadPart = -kVsyncPeriod100ns;
+        KeSetTimerEx(&m_vsyncNotifyTimer, due, 0, &m_vsyncNotifyDpc);
     }
     return Status;
 }
@@ -156,7 +158,7 @@ void VioGpuVidPN::ReleasePostDisplayOwnership(D3DDDI_VIDEO_PRESENT_TARGET_ID Tar
     LARGE_INTEGER timeout = {0};
     timeout.QuadPart = Int32x32To64(1000, -10000);
 
-    m_shouldFlipStop = TRUE;
+    InterlockedExchange(&m_shouldFlipStop, 1);
 
     KeCancelTimer(&m_vsyncNotifyTimer);
     KeFlushQueuedDpcs();
@@ -2053,7 +2055,7 @@ void VioGpuVidPN::VsyncNotifyTimerDpc(KDPC *dpc, PVOID deferredContext, PVOID sy
     UNREFERENCED_PARAMETER(systemArg2);
 
     VioGpuVidPN *vidpn = reinterpret_cast<VioGpuVidPN *>(deferredContext);
-    if (!vidpn || vidpn->m_shouldFlipStop)
+    if (!vidpn || InterlockedCompareExchange(&vidpn->m_shouldFlipStop, 0, 0) != 0)
     {
         return;
     }

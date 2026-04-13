@@ -154,7 +154,7 @@ class VioGpuVidPN
     volatile LONG m_shouldFlip = 0;
 
 
-    BOOL m_shouldFlipStop = false;
+    volatile LONG m_shouldFlipStop = 0;
     KTIMER m_vsyncNotifyTimer;
     KDPC m_vsyncNotifyDpc;
     ULONG m_timerRes = 0;
