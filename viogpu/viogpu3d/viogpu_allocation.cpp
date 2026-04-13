@@ -197,6 +197,32 @@ VioGpuAllocation::~VioGpuAllocation(void)
     {
         PLIST_ENTRY entry = RemoveHeadList(&m_blob_map_list);
         BlobUserMapping *map = CONTAINING_RECORD(entry, BlobUserMapping, ListEntry);
+        if (m_blob_map_user_refs > 0)
+        {
+            m_blob_map_user_refs--;
+        }
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s dropping map res_id=0x%x pid=%p process=%p user_va=%p size=0x%llx ref=%u\n",
+                  __FUNCTION__,
+                  m_Id,
+                  map->ProcessId,
+                  map->Process,
+                  map->UserVa,
+                  map->Size,
+                  map->RefCount));
+        if (map->UserVa)
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s force unmap stale map res_id=0x%x user_va=%p pid=%p process=%p\n",
+                     __FUNCTION__,
+                      m_Id,
+                      map->UserVa,
+                      map->ProcessId,
+                      map->Process));
+            m_adapter->GetDxgkInterface()->DxgkCbUnmapMemory(
+                m_adapter->GetDxgkInterface()->DeviceHandle, map->UserVa);
+            map->UserVa = NULL;
+        }
         if (map->Process)
         {
             ObDereferenceObject(map->Process);
