@@ -122,7 +122,9 @@ NTSTATUS VioGpuVidPN::Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren)
     InterlockedExchange(&m_sourceAddressQueueHead, 0);
     InterlockedExchange(&m_sourceAddressQueueTail, 0);
     InterlockedExchange(&m_sourceQueueFullCount, 0);
-    KeInitializeTimerEx(&m_vsyncNotifyTimer, SynchronizationTimer);
+
+    m_pVsyncNotifyTimer = new (NonPagedPoolNx) KTIMER;
+    KeInitializeTimerEx(m_pVsyncNotifyTimer, SynchronizationTimer);
     KeInitializeDpc(&m_vsyncNotifyDpc, VioGpuVidPN::VsyncNotifyTimerDpc, this);
     m_timerRes = ExSetTimerResolution(10000, TRUE);
     {
@@ -131,8 +133,22 @@ NTSTATUS VioGpuVidPN::Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren)
         KeQuerySystemTime(&now);
         next_vsync_time.QuadPart = now.QuadPart + kVsyncPeriod100ns;
         due.QuadPart = -kVsyncPeriod100ns;
-        KeSetTimerEx(&m_vsyncNotifyTimer, due, 0, &m_vsyncNotifyDpc);
+        KeSetTimerEx(m_pVsyncNotifyTimer, due, 0, &m_vsyncNotifyDpc);
     }
+    return Status;
+}
+
+NTSTATUS VioGpuVidPN::Stop(void)
+{
+    PAGED_CODE();
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (m_pVsyncNotifyTimer)
+    {
+        KeCancelTimer(m_pVsyncNotifyTimer);
+        m_pVsyncNotifyTimer = NULL;
+    }
+
     return Status;
 }
 
@@ -163,7 +179,11 @@ void VioGpuVidPN::ReleasePostDisplayOwnership(D3DDDI_VIDEO_PRESENT_TARGET_ID Tar
 
     InterlockedExchange(&m_shouldFlipStop, 1);
 
-    KeCancelTimer(&m_vsyncNotifyTimer);
+    if (m_pVsyncNotifyTimer)
+    {
+        KeCancelTimer(m_pVsyncNotifyTimer);
+        m_pVsyncNotifyTimer = NULL;
+    }
     KeFlushQueuedDpcs();
 
     if (m_timerRes)
@@ -2085,7 +2105,14 @@ void VioGpuVidPN::VsyncNotifyTimerDpc(KDPC *dpc, PVOID deferredContext, PVOID sy
     // submit a NOP to trigger the ISR generate CRTC_VSYNC
     vidpn->m_pAdapter->ctrlQueue.SubmitNop(NULL, NULL, FALSE);
 
-    KeSetTimerEx(&vidpn->m_vsyncNotifyTimer, next, 0, &vidpn->m_vsyncNotifyDpc);
+    if (vidpn->m_pVsyncNotifyTimer)
+    {
+        KeSetTimerEx(vidpn->m_pVsyncNotifyTimer, next, 0, &vidpn->m_vsyncNotifyDpc);
+    }
+    else
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("%s: vsync notify timer is null\n", __FUNCTION__));
+    }
 }
 
 
