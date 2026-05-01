@@ -46,6 +46,7 @@ class VioGpuVidPN
     ~VioGpuVidPN();
 
     NTSTATUS Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren);
+    NTSTATUS Stop(void);
     NTSTATUS AcquirePostDisplayOwnership();
     void ReleasePostDisplayOwnership(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, DXGK_DISPLAY_INFORMATION *pDisplayInfo);
     void Powerdown();
@@ -155,7 +156,7 @@ class VioGpuVidPN
 
 
     volatile LONG m_shouldFlipStop = 0;
-    KTIMER m_vsyncNotifyTimer;
+    PKTIMER m_pVsyncNotifyTimer;
     KDPC m_vsyncNotifyDpc;
     ULONG m_timerRes = 0;
     LARGE_INTEGER next_vsync_time = {0};
