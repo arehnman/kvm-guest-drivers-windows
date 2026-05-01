@@ -1,7 +1,7 @@
 #pragma once
 #include "kdebugprint.h"
 
-#define DBG 1
+// #define DBG 1
 
 #ifndef TRACE_LEVEL_INFORMATION
 #define TRACE_LEVEL_NONE        0   // Tracing is not on

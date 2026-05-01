@@ -36,8 +36,9 @@
 #include "viogpu_adapter.h"
 #include "viogpu_device.h"
 
-#pragma code_seg(push)
-#pragma code_seg("INIT")
+// BEGIN: Non-paged data
+#pragma data_seg(push)
+#pragma data_seg()
 
 int nDebugLevel;
 int virtioDebugLevel;
@@ -45,6 +46,16 @@ int bDebugPrint;
 int bBreakAlways;
 
 tDebugPrintFunc VirtioDebugPrintProc;
+
+#pragma data_seg(pop)
+// END: Non-paged data
+
+#include <ntddk.h>
+#include "viogpu_device.h"
+
+// BEGIN: Init code
+#pragma code_seg(push)
+#pragma code_seg("INIT")
 
 #ifdef DBG
 void InitializeDebugPrints(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING RegistryPath)
@@ -68,16 +79,13 @@ void InitializeDebugPrints(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Re
 }
 #endif
 
-#include <ntddk.h>
-#include "viogpu_device.h"
-
-#pragma code_seg(push)
-#pragma code_seg("PAGE")
 extern "C" NTSTATUS DriverEntry(_In_ DRIVER_OBJECT *pDriverObject, _In_ UNICODE_STRING *pRegistryPath)
 {
     PAGED_CODE();
     VIOGPU_TRACE_INIT(pDriverObject, pRegistryPath);
+#ifdef DBG
     DbgPrint(TRACE_LEVEL_FATAL, ("---> VIOGPU FULL build on on %s %s\n", __DATE__, __TIME__));
+#endif
     DRIVER_INITIALIZATION_DATA InitialData = {0};
 
     InitialData.Version = DXGKDDI_INTERFACE_VERSION_WDDM1_3;
