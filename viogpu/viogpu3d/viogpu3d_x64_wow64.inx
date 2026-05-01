@@ -121,7 +121,7 @@ HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\lvp_icd.x86_64.json",%REG_DWORD%,0
 HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\virtio_icd.x86_64.json",%REG_DWORD%,0
 HKLM,"SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers","%16425%\lvp_icd.x86.json",%REG_DWORD%,0
 HKLM,"SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers","%16425%\virtio_icd.x86.json",%REG_DWORD%,0
-HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler",EnablePreemption,%REG_DWORD%,0
+HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler",EnablePreemption,%REG_DWORD%,1
 HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",TdrDebugMode,%REG_DWORD%,1
 
 [VioGpu3D_PCI_MSIX]

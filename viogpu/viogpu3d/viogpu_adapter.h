@@ -117,6 +117,12 @@ class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
     static const UINT kMaxTrackedNodes = 8;
     static const UINT kMaxTrackedEngines = 8;
     volatile LONG m_lastNotifiedFence[kMaxTrackedNodes][kMaxTrackedEngines];
+    volatile LONG m_preemptSubmittedOutstanding[kMaxTrackedNodes][kMaxTrackedEngines];
+    volatile LONG m_pendingPreemptionFence[kMaxTrackedNodes][kMaxTrackedEngines];
+    volatile LONG m_preemptionRequestCount;
+    volatile LONG m_preemptionDeferredCount;
+    volatile LONG m_preemptionNotifyCount;
+    volatile LONG m_preemptionInvalidCount;
     volatile LONG m_outOfOrderFenceDropCount;
     CAPSET_INFO m_capsetInfos[VIRTIO_GPU_MAX_CAPSET_ID + 1];
 
@@ -201,6 +207,19 @@ class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
     {
         return &m_DxgkInterface;
     }
+    NTSTATUS PreemptCommand(_In_ CONST DXGKARG_PREEMPTCOMMAND *pPreemptCommand);
+    NTSTATUS QueryCurrentFence(_Inout_ DXGKARG_QUERYCURRENTFENCE *pCurrentFence);
+    void RecordDmaSubmittedForPreemption(UINT fenceId,
+                                         UINT nodeOrdinal,
+                                         UINT engineOrdinal,
+                                         ULONG ctxId,
+                                         HANDLE ownerPid);
+    void RecordDmaCompletionForPreemptionFromIsr(UINT fenceId,
+                                                 UINT nodeOrdinal,
+                                                 UINT engineOrdinal,
+                                                 ULONG ctxId,
+                                                 HANDLE ownerPid);
+    UINT GetLastNotifiedFence(UINT nodeOrdinal, UINT engineOrdinal);
 
     void SetVsyncInterruptEnabled(BOOLEAN enabled)
     {
@@ -280,6 +299,16 @@ class VioGpuAdapter : IVioGpuPCI, public IVioGpuQueueSync
     VOID CtrlStagePushFromIsr(PGPU_VBUFFER buf, UINT len);
     BOOLEAN CtrlStagePopForDpc(PGPU_VBUFFER *buf, UINT *len);
     VOID ProcessCtrlQueueBuffer(PGPU_VBUFFER pvbuf, UINT len);
+    void NotifyDmaPreempted(UINT preemptionFenceId,
+                            UINT lastCompletedFenceId,
+                            UINT nodeOrdinal,
+                            UINT engineOrdinal,
+                            BOOLEAN fromIsr,
+                            PCSTR reason);
+    void NotifyPendingPreemptionIfDrained(UINT nodeOrdinal,
+                                          UINT engineOrdinal,
+                                          BOOLEAN fromIsr,
+                                          PCSTR reason);
     BOOLEAN ShouldNotifyDmaFence(UINT fenceId,
                                  UINT nodeOrdinal,
                                  UINT engineOrdinal,

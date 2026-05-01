@@ -495,6 +495,11 @@ NTSTATUS VioGpuCommander::SubmitCommand(const DXGKARG_SUBMITCOMMAND *pSubmitComm
     }
 
     cmd->PrepareSubmit(pSubmitCommand);
+    m_pAdapter->RecordDmaSubmittedForPreemption(cmd->GetSubmissionFenceId(),
+                                                cmd->GetNodeOrdinal(),
+                                                cmd->GetEngineOrdinal(),
+                                                cmd->GetContextId(),
+                                                cmd->GetOwnerProcessId());
 
     cmd->Run();
 

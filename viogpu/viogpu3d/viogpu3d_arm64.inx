@@ -91,7 +91,7 @@ HKR,, InstalledDisplayDrivers,     %REG_MULTI_SZ%, viogpu_d3d10,viogpu_d3d10,vio
 
 HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\lvp_icd.aarch64.json",%REG_DWORD%,0
 HKLM,"SOFTWARE\Khronos\Vulkan\Drivers","%11%\virtio_icd.aarch64.json",%REG_DWORD%,0
-HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler",EnablePreemption,%REG_DWORD%,0
+HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler",EnablePreemption,%REG_DWORD%,1
 HKLM,"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",TdrDebugMode,%REG_DWORD%,1
 
 [VioGpu3D_PCI_MSIX]

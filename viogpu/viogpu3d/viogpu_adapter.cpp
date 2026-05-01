@@ -61,6 +61,23 @@ struct NOTIFY_CONTEXT
     BOOL triggerDpc;
 };
 
+static BOOLEAN NotifyInterruptSyncRoutine(PVOID ctxVoid)
+{
+    NOTIFY_CONTEXT *ctx = (NOTIFY_CONTEXT *)ctxVoid;
+    if (!ctx || !ctx->pDxgkInterface || !ctx->interrupt)
+    {
+        return FALSE;
+    }
+
+    ctx->pDxgkInterface->DxgkCbNotifyInterrupt(ctx->pDxgkInterface->DeviceHandle, ctx->interrupt);
+    if (ctx->triggerDpc)
+    {
+        ctx->pDxgkInterface->DxgkCbQueueDpc(ctx->pDxgkInterface->DeviceHandle);
+    }
+
+    return TRUE;
+}
+
 typedef struct _CTRLQUEUE_SYNCEXEC_CONTEXT
 {
     VIOGPU_SYNC_EXEC_ROUTINE routine;
@@ -71,6 +88,11 @@ typedef struct _CTRLQUEUE_SYNCEXEC_CONTEXT
 static __forceinline BOOLEAN IsFenceStrictlyNewer(UINT candidateFence, UINT lastFence)
 {
     return static_cast<LONG>(candidateFence - lastFence) > 0;
+}
+
+static __forceinline BOOLEAN ShouldLogPreemptionSample(LONG count)
+{
+    return count <= 16 || (count & (count - 1)) == 0;
 }
 
 static BOOLEAN CtrlQueueSyncExecRoutine(PVOID ctxVoid)
@@ -146,6 +168,12 @@ VioGpuAdapter::VioGpuAdapter(_In_ DEVICE_OBJECT *pPhysicalDeviceObject)
     m_shmem_allocator.Init(0);
     m_PendingWorks = 0;
     RtlZeroMemory((void *)m_lastNotifiedFence, sizeof(m_lastNotifiedFence));
+    RtlZeroMemory((void *)m_preemptSubmittedOutstanding, sizeof(m_preemptSubmittedOutstanding));
+    RtlZeroMemory((void *)m_pendingPreemptionFence, sizeof(m_pendingPreemptionFence));
+    m_preemptionRequestCount = 0;
+    m_preemptionDeferredCount = 0;
+    m_preemptionNotifyCount = 0;
+    m_preemptionInvalidCount = 0;
     m_outOfOrderFenceDropCount = 0;
     KeInitializeEvent(&m_ConfigUpdateEvent, SynchronizationEvent, FALSE);
     m_bStopWorkThread = FALSE;
@@ -583,6 +611,10 @@ NTSTATUS VioGpuAdapter::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO *pQ
                 pDriverCaps->SupportDirectFlip = 1;
                 pDriverCaps->SchedulingCaps.MultiEngineAware = 1;
                 pDriverCaps->SchedulingCaps.PreemptionAware = 1;
+                pDriverCaps->PreemptionCaps.GraphicsPreemptionGranularity =
+                    D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;
+                pDriverCaps->PreemptionCaps.ComputePreemptionGranularity =
+                    D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY;
 
                 pDriverCaps->GpuEngineTopology.NbAsymetricProcessingNodes = 1;
 
@@ -1100,6 +1132,284 @@ BOOLEAN VioGpuAdapter::ShouldNotifyDmaFence(UINT fenceId,
               ownerPid,
               dropCount));
     return FALSE;
+}
+
+UINT VioGpuAdapter::GetLastNotifiedFence(UINT nodeOrdinal, UINT engineOrdinal)
+{
+    if (nodeOrdinal >= kMaxTrackedNodes || engineOrdinal >= kMaxTrackedEngines)
+    {
+        return 0;
+    }
+
+    return static_cast<UINT>(
+        InterlockedCompareExchange(&m_lastNotifiedFence[nodeOrdinal][engineOrdinal], 0, 0));
+}
+
+void VioGpuAdapter::NotifyDmaPreempted(UINT preemptionFenceId,
+                                       UINT lastCompletedFenceId,
+                                       UINT nodeOrdinal,
+                                       UINT engineOrdinal,
+                                       BOOLEAN fromIsr,
+                                       PCSTR reason)
+{
+    DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};
+    interrupt.InterruptType = DXGK_INTERRUPT_DMA_PREEMPTED;
+    interrupt.DmaPreempted.PreemptionFenceId = preemptionFenceId;
+    interrupt.DmaPreempted.LastCompletedFenceId = lastCompletedFenceId;
+    interrupt.DmaPreempted.NodeOrdinal = nodeOrdinal;
+    interrupt.DmaPreempted.EngineOrdinal = engineOrdinal;
+
+    LONG notifyCount = InterlockedIncrement(&m_preemptionNotifyCount);
+    if (ShouldLogPreemptionSample(notifyCount))
+    {
+        DbgPrint(TRACE_LEVEL_VERBOSE,
+                 ("%s preemption_notify[%ld] reason=%s preempt_fence=%u last_completed=%u node=%u engine=%u from_isr=%u\n",
+                  __FUNCTION__,
+                  notifyCount,
+                  reason ? reason : "unknown",
+                  preemptionFenceId,
+                  lastCompletedFenceId,
+                  nodeOrdinal,
+                  engineOrdinal,
+                  fromIsr));
+    }
+
+    if (fromIsr)
+    {
+        m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
+        return;
+    }
+
+    NOTIFY_CONTEXT notify = {};
+    notify.pDxgkInterface = &m_DxgkInterface;
+    notify.interrupt = &interrupt;
+    notify.triggerDpc = TRUE;
+
+    BOOLEAN callbackRet = FALSE;
+    NTSTATUS status = m_DxgkInterface.DxgkCbSynchronizeExecution(m_DxgkInterface.DeviceHandle,
+                                                                  NotifyInterruptSyncRoutine,
+                                                                  &notify,
+                                                                  0,
+                                                                  &callbackRet);
+    if (!NT_SUCCESS(status) || !callbackRet)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR,
+                 ("%s preemption_notify_sync_failed status=0x%x callback=%u preempt_fence=%u node=%u engine=%u\n",
+                  __FUNCTION__,
+                  status,
+                  callbackRet,
+                  preemptionFenceId,
+                  nodeOrdinal,
+                  engineOrdinal));
+        m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
+        m_DxgkInterface.DxgkCbQueueDpc(m_DxgkInterface.DeviceHandle);
+    }
+}
+
+void VioGpuAdapter::NotifyPendingPreemptionIfDrained(UINT nodeOrdinal,
+                                                     UINT engineOrdinal,
+                                                     BOOLEAN fromIsr,
+                                                     PCSTR reason)
+{
+    if (nodeOrdinal >= kMaxTrackedNodes || engineOrdinal >= kMaxTrackedEngines)
+    {
+        return;
+    }
+
+    LONG outstanding = InterlockedCompareExchange(&m_preemptSubmittedOutstanding[nodeOrdinal][engineOrdinal], 0, 0);
+    if (outstanding != 0)
+    {
+        return;
+    }
+
+    LONG pendingFence = InterlockedExchange(&m_pendingPreemptionFence[nodeOrdinal][engineOrdinal], 0);
+    if (pendingFence == 0)
+    {
+        return;
+    }
+
+    NotifyDmaPreempted(static_cast<UINT>(pendingFence),
+                       GetLastNotifiedFence(nodeOrdinal, engineOrdinal),
+                       nodeOrdinal,
+                       engineOrdinal,
+                       fromIsr,
+                       reason);
+}
+
+NTSTATUS VioGpuAdapter::PreemptCommand(_In_ CONST DXGKARG_PREEMPTCOMMAND *pPreemptCommand)
+{
+    if (!pPreemptCommand)
+    {
+        InterlockedIncrement(&m_preemptionInvalidCount);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    UINT nodeOrdinal = pPreemptCommand->NodeOrdinal;
+    UINT engineOrdinal = pPreemptCommand->EngineOrdinal;
+    UINT preemptionFenceId = pPreemptCommand->PreemptionFenceId;
+
+    if (nodeOrdinal >= kMaxTrackedNodes || engineOrdinal >= kMaxTrackedEngines)
+    {
+        LONG invalidCount = InterlockedIncrement(&m_preemptionInvalidCount);
+        DbgPrint(TRACE_LEVEL_ERROR,
+                 ("%s invalid_preemption[%ld] preempt_fence=%u node=%u engine=%u flags=0x%x\n",
+                  __FUNCTION__,
+                  invalidCount,
+                  preemptionFenceId,
+                  nodeOrdinal,
+                  engineOrdinal,
+                  pPreemptCommand->Flags.Value));
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    LONG requestCount = InterlockedIncrement(&m_preemptionRequestCount);
+    LONG outstanding = InterlockedCompareExchange(&m_preemptSubmittedOutstanding[nodeOrdinal][engineOrdinal], 0, 0);
+    if (outstanding > 0)
+    {
+        LONG previousFence =
+            InterlockedExchange(&m_pendingPreemptionFence[nodeOrdinal][engineOrdinal],
+                                static_cast<LONG>(preemptionFenceId));
+        LONG deferredCount = InterlockedIncrement(&m_preemptionDeferredCount);
+        if (ShouldLogPreemptionSample(deferredCount))
+        {
+            DbgPrint(TRACE_LEVEL_VERBOSE,
+                     ("%s preemption_deferred[%ld] request=%ld preempt_fence=%u previous_pending=%ld "
+                      "outstanding=%ld last_completed=%u node=%u engine=%u flags=0x%x\n",
+                      __FUNCTION__,
+                      deferredCount,
+                      requestCount,
+                      preemptionFenceId,
+                      previousFence,
+                      outstanding,
+                      GetLastNotifiedFence(nodeOrdinal, engineOrdinal),
+                      nodeOrdinal,
+                      engineOrdinal,
+                      pPreemptCommand->Flags.Value));
+        }
+
+        NotifyPendingPreemptionIfDrained(nodeOrdinal, engineOrdinal, FALSE, "preempt_race_drained");
+        return STATUS_SUCCESS;
+    }
+
+    if (ShouldLogPreemptionSample(requestCount))
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s preemption_idle request=%ld preempt_fence=%u last_completed=%u node=%u engine=%u flags=0x%x\n",
+                  __FUNCTION__,
+                  requestCount,
+                  preemptionFenceId,
+                  GetLastNotifiedFence(nodeOrdinal, engineOrdinal),
+                  nodeOrdinal,
+                  engineOrdinal,
+                  pPreemptCommand->Flags.Value));
+    }
+    NotifyDmaPreempted(preemptionFenceId,
+                       GetLastNotifiedFence(nodeOrdinal, engineOrdinal),
+                       nodeOrdinal,
+                       engineOrdinal,
+                       FALSE,
+                       "preempt_idle");
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS VioGpuAdapter::QueryCurrentFence(_Inout_ DXGKARG_QUERYCURRENTFENCE *pCurrentFence)
+{
+    if (!pCurrentFence)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (pCurrentFence->NodeOrdinal >= kMaxTrackedNodes ||
+        pCurrentFence->EngineOrdinal >= kMaxTrackedEngines)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR,
+                 ("%s invalid_query node=%u engine=%u\n",
+                  __FUNCTION__,
+                  pCurrentFence->NodeOrdinal,
+                  pCurrentFence->EngineOrdinal));
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    pCurrentFence->CurrentFence = GetLastNotifiedFence(pCurrentFence->NodeOrdinal,
+                                                       pCurrentFence->EngineOrdinal);
+    DbgPrint(TRACE_LEVEL_VERBOSE,
+             ("%s node=%u engine=%u current_fence=%u\n",
+              __FUNCTION__,
+              pCurrentFence->NodeOrdinal,
+              pCurrentFence->EngineOrdinal,
+              pCurrentFence->CurrentFence));
+
+    return STATUS_SUCCESS;
+}
+
+void VioGpuAdapter::RecordDmaSubmittedForPreemption(UINT fenceId,
+                                                    UINT nodeOrdinal,
+                                                    UINT engineOrdinal,
+                                                    ULONG ctxId,
+                                                    HANDLE ownerPid)
+{
+    if (nodeOrdinal >= kMaxTrackedNodes || engineOrdinal >= kMaxTrackedEngines)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s skipped_out_of_range fence=%u node=%u engine=%u ctx_id=%u owner_pid=%p\n",
+                  __FUNCTION__,
+                  fenceId,
+                  nodeOrdinal,
+                  engineOrdinal,
+                  ctxId,
+                  ownerPid));
+        return;
+    }
+
+    LONG outstanding = InterlockedIncrement(&m_preemptSubmittedOutstanding[nodeOrdinal][engineOrdinal]);
+    LONG pendingFence = InterlockedCompareExchange(&m_pendingPreemptionFence[nodeOrdinal][engineOrdinal], 0, 0);
+    if (pendingFence != 0)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s submit_while_preempt_pending fence=%u pending_preempt=%ld outstanding=%ld "
+                  "node=%u engine=%u ctx_id=%u owner_pid=%p\n",
+                  __FUNCTION__,
+                  fenceId,
+                  pendingFence,
+                  outstanding,
+                  nodeOrdinal,
+                  engineOrdinal,
+                  ctxId,
+                  ownerPid));
+    }
+}
+
+void VioGpuAdapter::RecordDmaCompletionForPreemptionFromIsr(UINT fenceId,
+                                                            UINT nodeOrdinal,
+                                                            UINT engineOrdinal,
+                                                            ULONG ctxId,
+                                                            HANDLE ownerPid)
+{
+    if (nodeOrdinal >= kMaxTrackedNodes || engineOrdinal >= kMaxTrackedEngines)
+    {
+        return;
+    }
+
+    LONG outstanding = InterlockedDecrement(&m_preemptSubmittedOutstanding[nodeOrdinal][engineOrdinal]);
+    if (outstanding < 0)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s outstanding_underflow fence=%u node=%u engine=%u ctx_id=%u owner_pid=%p\n",
+                  __FUNCTION__,
+                  fenceId,
+                  nodeOrdinal,
+                  engineOrdinal,
+                  ctxId,
+                  ownerPid));
+        InterlockedExchange(&m_preemptSubmittedOutstanding[nodeOrdinal][engineOrdinal], 0);
+        outstanding = 0;
+    }
+
+    if (outstanding == 0)
+    {
+        NotifyPendingPreemptionIfDrained(nodeOrdinal, engineOrdinal, TRUE, "dma_drained");
+    }
 }
 
 VOID VioGpuAdapter::CtrlStagePushFromIsr(PGPU_VBUFFER buf, UINT len)
@@ -1987,6 +2297,7 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
                             interrupt.DmaCompleted.EngineOrdinal = engineOrdinal;
                             m_DxgkInterface.DxgkCbNotifyInterrupt(m_DxgkInterface.DeviceHandle, &interrupt);
                         }
+                        RecordDmaCompletionForPreemptionFromIsr(fenceId, nodeOrdinal, engineOrdinal, ctxId, ownerPid);
                     }
                 }
 
