@@ -2083,7 +2083,7 @@ void VioGpuVidPN::VsyncNotifyTimerDpc(KDPC *dpc, PVOID deferredContext, PVOID sy
     vidpn->Flip();
     InterlockedExchange(&vidpn->m_vsync, 1);
     // submit a NOP to trigger the ISR generate CRTC_VSYNC
-    vidpn->m_pAdapter->ctrlQueue.SubmitNop(NULL, NULL, FALSE);
+    vidpn->m_pAdapter->ctrlQueue.SubmitNop(NULL, NULL);
 
     KeSetTimerEx(&vidpn->m_vsyncNotifyTimer, next, 0, &vidpn->m_vsyncNotifyDpc);
 }

@@ -893,7 +893,7 @@ void CtrlQueue::SubmitCommand(void *cmdbuf, ULONG size, ULONG ctx_id, void (*com
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
-UINT CtrlQueue::SubmitNop(void (*complete_cb)(void *), void *complete_ctx, BOOLEAN blocking, BOOLEAN fenced)
+UINT CtrlQueue::SubmitNop(void (*complete_cb)(void *), void *complete_ctx, BOOLEAN fenced)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
@@ -907,7 +907,7 @@ UINT CtrlQueue::SubmitNop(void (*complete_cb)(void *), void *complete_ctx, BOOLE
     vbuf->complete_cb = complete_cb;
     vbuf->complete_ctx = complete_ctx;
 
-    UINT ret = fenced ? QueueBufferFenced(vbuf, blocking) : QueueBuffer(vbuf, blocking);
+    UINT ret = fenced ? QueueBufferFenced(vbuf) : QueueBuffer(vbuf);
     if (ret)
     {
         ReleaseBuffer(vbuf);
@@ -1040,9 +1040,7 @@ void CtrlQueue::SetScanout(UINT scan_id, UINT res_id, UINT width, UINT height, U
     cmd->r.x = x;
     cmd->r.y = y;
 
-    // During session transitions (e.g. remote disconnect), waiting indefinitely for
-    // queue space can stall win32k/dxgkrnl callers. Keep this submission non-blocking.
-    UINT ret = QueueBuffer(vbuf, FALSE);
+    UINT ret = QueueBuffer(vbuf);
     if (ret)
     {
         DbgPrint(TRACE_LEVEL_WARNING,
@@ -1298,10 +1296,8 @@ UINT CtrlQueue::Flush()
     }
 }
 
-UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking)
+UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf)
 {
-    UNREFERENCED_PARAMETER(blocking);
-
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
 
     if (!ValidateCtrlQueueBuffer(buf))
@@ -1319,14 +1315,14 @@ UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking)
     return 0;
 }
 
-UINT CtrlQueue::QueueBufferFenced(PGPU_VBUFFER vbuf, BOOLEAN blocking)
+UINT CtrlQueue::QueueBufferFenced(PGPU_VBUFFER vbuf)
 {
     UINT ret;
     PGPU_CTRL_HDR hdr = (PGPU_CTRL_HDR)vbuf->buf;
     hdr->fence_id = InterlockedIncrement(&m_FenceIdr);
     hdr->flags |= VIRTIO_GPU_FLAG_FENCE;
 
-    ret = QueueBuffer(vbuf, blocking);
+    ret = QueueBuffer(vbuf);
 
     return ret;
 }

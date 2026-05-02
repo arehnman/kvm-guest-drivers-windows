@@ -257,7 +257,7 @@ class CtrlQueue : public VioGpuQueue
     PVOID AllocCmd(PGPU_VBUFFER *buf, int sz);
     PVOID AllocCmdResp(PGPU_VBUFFER *buf, int cmd_sz, PVOID resp_buf, int resp_sz);
 
-    UINT QueueBufferFenced(PGPU_VBUFFER vbuf, BOOLEAN blocking = TRUE);
+    UINT QueueBufferFenced(PGPU_VBUFFER vbuf);
     PGPU_VBUFFER DequeueBuffer(_Out_ UINT *len);
     PGPU_VBUFFER DequeueBufferFromIsr(_Out_ UINT *len);
     void SetSynchronizeExecution(IVioGpuQueueSync *syncExec)
@@ -293,10 +293,7 @@ class CtrlQueue : public VioGpuQueue
 
     void SetScanout(UINT scan_id, UINT res_id, UINT width, UINT height, UINT x, UINT y);
     void ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y);
-    UINT SubmitNop(void (*complete_cb)(void *),
-                   void *complete_ctx,
-                   BOOLEAN blocking = TRUE,
-                   BOOLEAN fenced = FALSE);
+    UINT SubmitNop(void (*complete_cb)(void *), void *complete_ctx, BOOLEAN fenced = FALSE);
     void TransferToHost2D(UINT res_id, ULONG offset, UINT width, UINT height, UINT x, UINT y);
     void TransferToHost3D(UINT res_id, GPU_BOX *box);
 
@@ -320,7 +317,7 @@ class CtrlQueue : public VioGpuQueue
                              PGPU_VBUFFER buf,
                              BOOLEAN kickOnSuccess);
     UINT SubmitBuffer(PGPU_VBUFFER buf);
-    UINT QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking = TRUE);
+    UINT QueueBuffer(PGPU_VBUFFER buf);
 
     volatile LONG m_FenceIdr;
     LIST_ENTRY m_CtrlQueueList;
