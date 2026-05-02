@@ -52,6 +52,7 @@ typedef struct virtio_gpu_vbuffer
     char *resp_buf;
     int resp_size;
     LIST_ENTRY list_entry;
+    LIST_ENTRY ctrl_queue_entry;
     LIST_ENTRY isr_stage_entry;
     UINT isr_stage_len;
 
@@ -247,8 +248,10 @@ class CtrlQueue : public VioGpuQueue
     CtrlQueue() : VioGpuQueue()
     {
         m_FenceIdr = 0;
-        KeInitializeEvent(&m_CtrlQueueEvent, SynchronizationEvent, FALSE);
+        InitializeListHead(&m_CtrlQueueList);
         KeInitializeSpinLock(&m_CtrlQueueSpinLock);
+        m_CtrlQueueFlushInProgress = 0;
+        m_CtrlQueueFlushRequested = 0;
     };
 
     PVOID AllocCmd(PGPU_VBUFFER *buf, int sz);
@@ -261,10 +264,7 @@ class CtrlQueue : public VioGpuQueue
     {
         m_SyncExec = syncExec;
     }
-    void SignalQueueSpace()
-    {
-        KeSetEvent(&m_CtrlQueueEvent, IO_NO_INCREMENT, FALSE);
-    }
+    UINT Flush();
 
     void CreateResource(UINT res_id, UINT format, UINT width, UINT height);
     void CreateResource3D(UINT res_id, VIOGPU_RESOURCE_OPTIONS *options);
@@ -319,11 +319,14 @@ class CtrlQueue : public VioGpuQueue
                              UINT incnt,
                              PGPU_VBUFFER buf,
                              BOOLEAN kickOnSuccess);
+    UINT SubmitBuffer(PGPU_VBUFFER buf);
     UINT QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking = TRUE);
 
     volatile LONG m_FenceIdr;
-    KEVENT m_CtrlQueueEvent;
+    LIST_ENTRY m_CtrlQueueList;
     KSPIN_LOCK m_CtrlQueueSpinLock;
+    volatile LONG m_CtrlQueueFlushInProgress;
+    volatile LONG m_CtrlQueueFlushRequested;
     IVioGpuQueueSync *m_SyncExec = NULL;
 };
 

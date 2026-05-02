@@ -1199,9 +1199,9 @@ VOID VioGpuAdapter::DpcRoutine(VOID)
             DbgPrint(TRACE_LEVEL_FATAL, ("---> %s ConfigChanged\n", __FUNCTION__));
             KeSetEvent(&m_ConfigUpdateEvent, IO_NO_INCREMENT, FALSE);
         }
-    	// QueueBuffer() waits on m_CtrlQueueEvent when the ctrl queue is full.
-	// In ISR-staging mode, dequeue happens in ISR, so wake waiters here in DPC.
-	ctrlQueue.SignalQueueSpace();
+        // In ISR-staging mode, dequeue happens in ISR, so flush pending
+        // control commands here after descriptor space has been returned.
+        ctrlQueue.Flush();
     }
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 

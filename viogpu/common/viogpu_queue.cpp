@@ -1063,6 +1063,117 @@ void CtrlQueue::SetScanout(UINT scan_id, UINT res_id, UINT width, UINT height, U
 
 #define SGLIST_SIZE 256
 
+static BOOLEAN ValidateCtrlQueueBuffer(PGPU_VBUFFER buf)
+{
+    if (!buf)
+    {
+        return FALSE;
+    }
+
+    if (buf->size > PAGE_SIZE)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s size is too big %d\n", __FUNCTION__, buf->size));
+        return FALSE;
+    }
+
+    if (buf->resp_size > PAGE_SIZE)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s resp_size is too big %d\n", __FUNCTION__, buf->resp_size));
+        return FALSE;
+    }
+
+    const UINT dataSgCount = BYTES_TO_PAGES(buf->data_size);
+    const UINT cmdSgCount = buf->size ? 1 : 0;
+    const UINT respSgCount = buf->resp_size ? 1 : 0;
+    if ((cmdSgCount + dataSgCount + respSgCount) > SGLIST_SIZE)
+    {
+        DbgPrint(TRACE_LEVEL_ERROR,
+                 ("<--> %s no more sg element spots left cmd=%u data=%u resp=%u\n",
+                  __FUNCTION__,
+                  cmdSgCount,
+                  dataSgCount,
+                  respSgCount));
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static BOOLEAN BuildCtrlQueueSGList(PGPU_VBUFFER buf,
+                                    VirtIOBufferDescriptor *sg,
+                                    UINT sgSize,
+                                    UINT *outcnt,
+                                    UINT *incnt)
+{
+    UINT sgleft = sgSize;
+
+    *outcnt = 0;
+    *incnt = 0;
+
+    if (!ValidateCtrlQueueBuffer(buf))
+    {
+        return FALSE;
+    }
+
+    if (buf->size)
+    {
+        if (!BuildSGElement(&sg[*outcnt + *incnt], (PVOID)buf->buf, buf->size))
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s failed to build command sg element\n", __FUNCTION__));
+            return FALSE;
+        }
+        (*outcnt)++;
+        sgleft--;
+    }
+
+    if (buf->data_size)
+    {
+        ULONG data_size = buf->data_size;
+        PVOID data_buf = (PVOID)buf->data_buf;
+        while (data_size)
+        {
+            if (sgleft == 0)
+            {
+                DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s no more sg element spots left %u\n", __FUNCTION__, *outcnt));
+                return FALSE;
+            }
+
+            const UINT sgIndex = *outcnt + *incnt;
+            if (!BuildSGElement(&sg[sgIndex], data_buf, data_size))
+            {
+                DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s failed to build data sg element\n", __FUNCTION__));
+                return FALSE;
+            }
+
+            data_buf = (PVOID)((LONG_PTR)data_buf + sg[sgIndex].length);
+            data_size -= sg[sgIndex].length;
+            (*outcnt)++;
+            sgleft--;
+        }
+    }
+
+    if (buf->resp_size)
+    {
+        if (sgleft == 0)
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s no more sg element spots left for response\n", __FUNCTION__));
+            return FALSE;
+        }
+
+        if (!BuildSGElement(&sg[*outcnt + *incnt], (PVOID)buf->resp_buf, buf->resp_size))
+        {
+            DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s failed to build response sg element\n", __FUNCTION__));
+            return FALSE;
+        }
+        (*incnt)++;
+        sgleft--;
+    }
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s sgleft %d\n", __FUNCTION__, sgleft));
+
+    return TRUE;
+}
+
 typedef struct _CTRLQUEUE_SYNC_ADD_CTX
 {
     CtrlQueue *queue;
@@ -1124,112 +1235,88 @@ UINT CtrlQueue::AddBufferSerialized(VirtIOBufferDescriptor *sg,
     return ret;
 }
 
-UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking)
+UINT CtrlQueue::SubmitBuffer(PGPU_VBUFFER buf)
 {
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
-
     VirtIOBufferDescriptor sg[SGLIST_SIZE];
-    UINT sgleft = SGLIST_SIZE;
-    UINT outcnt = 0, incnt = 0;
+    UINT outcnt = 0;
+    UINT incnt = 0;
+
+    if (!BuildCtrlQueueSGList(buf, &sg[0], SGLIST_SIZE, &outcnt, &incnt))
+    {
+        return (UINT)-1;
+    }
+
+    return AddBufferSerialized(&sg[0], outcnt, incnt, buf, TRUE);
+}
+
+UINT CtrlQueue::Flush()
+{
     UINT ret = 0;
 
-    if (buf->size > PAGE_SIZE)
+    if (InterlockedCompareExchange(&m_CtrlQueueFlushInProgress, 1, 0) != 0)
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s size is too big %d\n", __FUNCTION__, buf->size));
         return 0;
     }
 
-    if (BuildSGElement(&sg[outcnt + incnt], (PVOID)buf->buf, buf->size))
+    for (;;)
     {
-        outcnt++;
-        sgleft--;
-    }
+        InterlockedExchange(&m_CtrlQueueFlushRequested, 0);
 
-    if (buf->data_size)
-    {
-        ULONG data_size = buf->data_size;
-        PVOID data_buf = (PVOID)buf->data_buf;
-        while (data_size)
+        PLIST_ENTRY entry;
+        while ((entry = ExInterlockedRemoveHeadList(&m_CtrlQueueList, &m_CtrlQueueSpinLock)) != NULL)
         {
-            if (BuildSGElement(&sg[outcnt + incnt], data_buf, data_size))
+            PGPU_VBUFFER queuedBuf = CONTAINING_RECORD(entry, GPU_VBUFFER, ctrl_queue_entry);
+
+            ret = SubmitBuffer(queuedBuf);
+            if (ret == 0)
             {
-                data_buf = (PVOID)((LONG_PTR)(data_buf) + PAGE_SIZE);
-                data_size -= min(data_size, PAGE_SIZE);
-                outcnt++;
-                sgleft--;
-                if (sgleft == 0)
-                {
-                    DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s no more sgelenamt spots left %d\n", __FUNCTION__, outcnt));
-                    return 0;
-                }
+                continue;
             }
+
+            ExInterlockedInsertHeadList(&m_CtrlQueueList, &queuedBuf->ctrl_queue_entry, &m_CtrlQueueSpinLock);
+            InterlockedExchange(&m_CtrlQueueFlushInProgress, 0);
+
+            if (ret == (UINT)-1)
+            {
+                DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s submit failed while flushing pending ctrl queue\n", __FUNCTION__));
+            }
+            return ret;
+        }
+
+        InterlockedExchange(&m_CtrlQueueFlushInProgress, 0);
+        // QueueBuffer may have enqueued while this flusher was exiting and
+        // observed m_CtrlQueueFlushInProgress still set.
+        if (InterlockedCompareExchange(&m_CtrlQueueFlushRequested, 0, 0) == 0)
+        {
+            return ret;
+        }
+
+        if (InterlockedCompareExchange(&m_CtrlQueueFlushInProgress, 1, 0) != 0)
+        {
+            return ret;
         }
     }
+}
 
-    if (buf->resp_size > PAGE_SIZE)
+UINT CtrlQueue::QueueBuffer(PGPU_VBUFFER buf, BOOLEAN blocking)
+{
+    UNREFERENCED_PARAMETER(blocking);
+
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
+
+    if (!ValidateCtrlQueueBuffer(buf))
     {
-        DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s resp_size is too big %d\n", __FUNCTION__, buf->resp_size));
-        return 0;
+        return (UINT)-1;
     }
 
-    if (buf->resp_size && (sgleft > 0))
-    {
-        if (BuildSGElement(&sg[outcnt + incnt], (PVOID)buf->resp_buf, buf->resp_size))
-        {
-            incnt++;
-            sgleft--;
-        }
-    }
+    ExInterlockedInsertTailList(&m_CtrlQueueList, &buf->ctrl_queue_entry, &m_CtrlQueueSpinLock);
+    InterlockedExchange(&m_CtrlQueueFlushRequested, 1);
 
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--> %s sgleft %d\n", __FUNCTION__, sgleft));
+    Flush();
 
-    PGPU_CTRL_HDR hdr = reinterpret_cast<PGPU_CTRL_HDR>(buf->buf);
-    UINT add_retry = 0;
-    const UINT max_add_retry = 2000;
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 
-    do
-    {
-        ret = AddBufferSerialized(&sg[0], outcnt, incnt, buf, TRUE);
-        if (ret == 0)
-        {
-            break;
-        }
-        if (ret == (UINT)-1)
-        {
-            DbgPrint(TRACE_LEVEL_ERROR, ("<--> %s synchronize-execution add failed\n", __FUNCTION__));
-            break;
-        }
-        if (!blocking)
-        {
-            break;
-        }
-
-        add_retry++;
-        if (add_retry >= max_add_retry)
-        {
-            DbgPrint(TRACE_LEVEL_ERROR,
-                     ("%s giving up after %u retries cmd=0x%x ret=%u\n",
-                      __FUNCTION__,
-                      add_retry,
-                      hdr ? hdr->type : 0,
-                      ret));
-            break;
-        }
-
-        LARGE_INTEGER t;
-        t.QuadPart = -10000LL;
-        NTSTATUS status = STATUS_SUCCESS;
-        while (status == STATUS_SUCCESS)
-        {
-            status = KeWaitForSingleObject(&m_CtrlQueueEvent, Executive, KernelMode, FALSE, &t);
-            if (status == STATUS_TIMEOUT)
-                DbgPrint(TRACE_LEVEL_VERBOSE, ("Waiting in QueueBuffer\n"));
-        }
-    } while (ret);
-
-    DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s ret = %d\n", __FUNCTION__, ret));
-
-    return ret;
+    return 0;
 }
 
 UINT CtrlQueue::QueueBufferFenced(PGPU_VBUFFER vbuf, BOOLEAN blocking)
@@ -1244,6 +1331,7 @@ UINT CtrlQueue::QueueBufferFenced(PGPU_VBUFFER vbuf, BOOLEAN blocking)
     return ret;
 }
 
+/* DequeueBuffer is only used for the viogpudo driver */
 PGPU_VBUFFER CtrlQueue::DequeueBuffer(_Out_ UINT *len)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
@@ -1258,7 +1346,7 @@ PGPU_VBUFFER CtrlQueue::DequeueBuffer(_Out_ UINT *len)
         *len = 0;
     }
 
-    KeSetEvent(&m_CtrlQueueEvent, IO_NO_INCREMENT, FALSE);
+    Flush();
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 
