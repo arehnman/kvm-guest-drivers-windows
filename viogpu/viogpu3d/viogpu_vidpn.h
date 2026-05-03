@@ -46,6 +46,7 @@ class VioGpuVidPN
     ~VioGpuVidPN();
 
     NTSTATUS Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren);
+    NTSTATUS Stop(void);
     NTSTATUS AcquirePostDisplayOwnership();
     void ReleasePostDisplayOwnership(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId, DXGK_DISPLAY_INFORMATION *pDisplayInfo);
     void Powerdown();
@@ -118,6 +119,7 @@ class VioGpuVidPN
     NTSTATUS SetVidPnSourceAddress(const DXGKARG_SETVIDPNSOURCEADDRESS *pSetVidPnSourceAddress);
 
   private:
+    VOID StopVsyncTimer(void);
     NTSTATUS SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_MODE *pSourceMode,
                                   CONST D3DKMDT_VIDPN_PRESENT_PATH *pPath);
     NTSTATUS AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMENDMONITORMODES *CONST pRecommendMonitorModes);
@@ -155,6 +157,7 @@ class VioGpuVidPN
 
 
     volatile LONG m_shouldFlipStop = 0;
+    KSPIN_LOCK m_vsyncTimerLock;
     KTIMER m_vsyncNotifyTimer;
     KDPC m_vsyncNotifyDpc;
     ULONG m_timerRes = 0;

@@ -303,7 +303,8 @@ NTSTATUS VioGpuAdapter::StartDevice(_In_ DXGK_START_INFO *pDxgkStartInfo,
 NTSTATUS VioGpuAdapter::StopDevice(VOID)
 {
     PAGED_CODE();
-
+    DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
+    vidpn.Stop();
     virtio_device_reset(&m_VioDev);
 
     m_Flags.DriverStarted = FALSE;
