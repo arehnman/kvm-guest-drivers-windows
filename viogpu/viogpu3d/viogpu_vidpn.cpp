@@ -121,20 +121,11 @@ NTSTATUS VioGpuVidPN::Start(ULONG *pNumberOfViews, ULONG *pNumberOfChildren)
     DbgPrint(TRACE_LEVEL_INFORMATION,
              ("<--- %s ColorFormat = %d\n", __FUNCTION__, m_CurrentModes[0].DispInfo.ColorFormat));
 
-    InterlockedExchange(&m_shouldFlipStop, 0);
     InterlockedExchange(&m_sourceAddressQueueHead, 0);
     InterlockedExchange(&m_sourceAddressQueueTail, 0);
     InterlockedExchange(&m_sourceQueueFullCount, 0);
 
-    m_timerRes = ExSetTimerResolution(10000, TRUE);
-    {
-        LARGE_INTEGER now;
-        LARGE_INTEGER due;
-        KeQuerySystemTime(&now);
-        next_vsync_time.QuadPart = now.QuadPart + kVsyncPeriod100ns;
-        due.QuadPart = -kVsyncPeriod100ns;
-        KeSetTimerEx(&m_vsyncNotifyTimer, due, 0, &m_vsyncNotifyDpc);
-    }
+    StartVsyncTimer();
     return Status;
 }
 
@@ -144,12 +135,6 @@ NTSTATUS VioGpuVidPN::Stop(void)
     NTSTATUS Status = STATUS_SUCCESS;
 
     StopVsyncTimer();
-
-    if (m_timerRes)
-    {
-        ExSetTimerResolution(m_timerRes, FALSE);
-        m_timerRes = 0;
-    }
     DestroyFrameBufferObj(TRUE);
 
     return Status;
@@ -192,6 +177,9 @@ void VioGpuVidPN::ReleasePostDisplayOwnership(D3DDDI_VIDEO_PRESENT_TARGET_ID Tar
 
 void VioGpuVidPN::Powerdown()
 {
+    PAGED_CODE();
+
+    StopVsyncTimer();
     DestroyFrameBufferObj(TRUE);
     m_CurrentModes[0].Flags.FrameBufferIsActive = FALSE;
     m_CurrentModes[0].FrameBuffer.Ptr = NULL;
@@ -2005,6 +1993,28 @@ PAGED_CODE_SEG_END
 #pragma code_seg(push)
 #pragma code_seg()
 
+VOID VioGpuVidPN::StartVsyncTimer(void)
+{
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (!m_timerRes)
+    {
+        m_timerRes = ExSetTimerResolution(10000, TRUE);
+    }
+
+    LARGE_INTEGER now;
+    LARGE_INTEGER due;
+    KeQuerySystemTime(&now);
+    next_vsync_time.QuadPart = now.QuadPart + kVsyncPeriod100ns;
+    due.QuadPart = -kVsyncPeriod100ns;
+
+    KIRQL oldIrql;
+    KeAcquireSpinLock(&m_vsyncTimerLock, &oldIrql);
+    InterlockedExchange(&m_shouldFlipStop, 0);
+    KeSetTimerEx(&m_vsyncNotifyTimer, due, 0, &m_vsyncNotifyDpc);
+    KeReleaseSpinLock(&m_vsyncTimerLock, oldIrql);
+}
+
 VOID VioGpuVidPN::StopVsyncTimer(void)
 {
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
@@ -2016,6 +2026,12 @@ VOID VioGpuVidPN::StopVsyncTimer(void)
     KeReleaseSpinLock(&m_vsyncTimerLock, oldIrql);
 
     KeFlushQueuedDpcs();
+
+    if (m_timerRes)
+    {
+        ExSetTimerResolution(m_timerRes, FALSE);
+        m_timerRes = 0;
+    }
 }
 
 void VioGpuVidPN::Flip()

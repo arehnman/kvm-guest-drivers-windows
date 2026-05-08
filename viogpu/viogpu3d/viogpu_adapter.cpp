@@ -422,6 +422,10 @@ NTSTATUS VioGpuAdapter::SetPowerState(_In_ ULONG HardwareUid,
             case PowerDeviceD0:
                 {
                     status = VioGpuAdapterInit();
+                    if (NT_SUCCESS(status))
+                    {
+                        vidpn.StartVsyncTimer();
+                    }
                 }
                 break;
             case PowerDeviceD1:
@@ -1852,6 +1856,7 @@ void VioGpuAdapter::VioGpuAdapterClose()
 {
     PAGED_CODE();
     DbgPrint(TRACE_LEVEL_FATAL, ("---> %s\n", __FUNCTION__));
+    vidpn.StopVsyncTimer();
     m_shmem_allocator.Reset();
 
     if (IsHardwareInit())
