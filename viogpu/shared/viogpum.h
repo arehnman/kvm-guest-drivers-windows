@@ -212,6 +212,7 @@ typedef struct _VIOGPU_CREATE_ALLOCATION_EXCHANGE
 #define VIOGPU_CMD_SUBMIT             0x1 // Submit Command to virgl
 #define VIOGPU_CMD_TRANSFER_TO_HOST   0x2 // Transfer resource to host
 #define VIOGPU_CMD_TRANSFER_FROM_HOST 0x3 // Transfer resource to host
+#define VIOGPU_CMD_PRESENT_FLIP       0x4 // Flip scanout to a resource
 
 #pragma pack(1)
 typedef struct _VIOGPU_COMMAND_HDR
@@ -233,6 +234,18 @@ typedef struct _VIOGPU_TRANSFER_CMD
     ULONG stride;
     ULONG layer_stride;
 } VIOGPU_TRANSFER_CMD;
+#pragma pack()
+
+#pragma pack(1)
+typedef struct _VIOGPU_PRESENT_FLIP_CMD
+{
+    ULONG scan_id;
+    ULONG res_id;
+    ULONG width;
+    ULONG height;
+    ULONG x;
+    ULONG y;
+} VIOGPU_PRESENT_FLIP_CMD;
 #pragma pack()
 
 #define BASE_NAMED_OBJECTS    L"\\BaseNamedObjects\\"

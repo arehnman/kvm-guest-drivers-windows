@@ -29,6 +29,16 @@ class VioGpuAllocation
         return m_Id;
     }
 
+    UINT GetWidth(void) const
+    {
+        return m_options.width;
+    }
+
+    UINT GetHeight(void) const
+    {
+        return m_options.height;
+    }
+
     void MarkBusy();
     void UnmarkBusy();
 

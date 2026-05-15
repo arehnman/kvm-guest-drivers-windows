@@ -292,7 +292,13 @@ class CtrlQueue : public VioGpuQueue
                          void *complete_ctx);
 
     void SetScanout(UINT scan_id, UINT res_id, UINT width, UINT height, UINT x, UINT y);
-    void ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y);
+    UINT ResFlush(UINT res_id,
+                  UINT width,
+                  UINT height,
+                  UINT x,
+                  UINT y,
+                  void (*complete_cb)(void *) = NULL,
+                  void *complete_ctx = NULL);
     UINT SubmitNop(void (*complete_cb)(void *), void *complete_ctx, BOOLEAN fenced = FALSE);
     void TransferToHost2D(UINT res_id, ULONG offset, UINT width, UINT height, UINT x, UINT y);
     void TransferToHost3D(UINT res_id, GPU_BOX *box);

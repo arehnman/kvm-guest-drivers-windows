@@ -221,6 +221,55 @@ void VioGpuCommand::Run()
                     break;
                 }
 
+            case VIOGPU_CMD_PRESENT_FLIP:
+                {
+                    if (cmdHdr->size < sizeof(VIOGPU_PRESENT_FLIP_CMD))
+                    {
+                        DbgPrint(TRACE_LEVEL_WARNING,
+                                 ("%s fence_id=%u invalid present flip size=%u\n",
+                                  __FUNCTION__,
+                                  m_FenceId,
+                                  cmdHdr->size));
+                        break;
+                    }
+
+                    VIOGPU_PRESENT_FLIP_CMD *flipCmd = (VIOGPU_PRESENT_FLIP_CMD *)cmdBody;
+
+                    InterlockedIncrement(&m_isrPendingPackets);
+                    InterlockedIncrement(&m_done);
+
+                    m_pAdapter->ctrlQueue.SetScanout(flipCmd->scan_id,
+                                                     flipCmd->res_id,
+                                                     flipCmd->width,
+                                                     flipCmd->height,
+                                                     flipCmd->x,
+                                                     flipCmd->y);
+                    UINT ret = m_pAdapter->ctrlQueue.ResFlush(flipCmd->res_id,
+                                                              flipCmd->width,
+                                                              flipCmd->height,
+                                                              flipCmd->x,
+                                                              flipCmd->y,
+                                                              VioGpuCommand::RunningCbDone,
+                                                              this);
+                    if (ret)
+                    {
+                        DbgPrint(TRACE_LEVEL_WARNING,
+                                 ("%s fence_id=%u failed present flip scan=%u res=%u rect=%ux%u+%u+%u ret=%u\n",
+                                  __FUNCTION__,
+                                  m_FenceId,
+                                  flipCmd->scan_id,
+                                  flipCmd->res_id,
+                                  flipCmd->width,
+                                  flipCmd->height,
+                                  flipCmd->x,
+                                  flipCmd->y,
+                                  ret));
+                        InterlockedDecrement(&m_isrPendingPackets);
+                        VioGpuCommand::VioGpuCommandDone();
+                    }
+                    break;
+                }
+
             default:
                 {
                     DbgPrint(TRACE_LEVEL_WARNING,

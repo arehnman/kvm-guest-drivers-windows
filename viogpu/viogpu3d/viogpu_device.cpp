@@ -166,8 +166,69 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
 {
     PAGED_CODE();
 
-    if (pPresent->Flags.Flip)
+    DXGK_ALLOCATIONLIST *dxgk_src =
+        pPresent->pAllocationList ? &pPresent->pAllocationList[DXGK_PRESENT_SOURCE_INDEX] : NULL;
+    DXGK_ALLOCATIONLIST *dxgk_dst =
+        pPresent->pAllocationList ? &pPresent->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX] : NULL;
+
+    if (pPresent->Flags.Flip || pPresent->Flags.FlipWithNoWait)
     {
+        if (pPresent->pDmaBuffer &&
+            pPresent->DmaSize != 0)
+        {
+            const UINT flipCommandSize = sizeof(VIOGPU_COMMAND_HDR) + sizeof(VIOGPU_PRESENT_FLIP_CMD);
+            if (pPresent->DmaSize < flipCommandSize)
+            {
+                return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+            }
+
+            if (!dxgk_src || dxgk_src->hDeviceSpecificAllocation == NULL)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            VioGpuAllocation *src =
+                reinterpret_cast<VioGpuDeviceAllocation *>(dxgk_src->hDeviceSpecificAllocation)->GetAllocation();
+            if (!src)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            VioGpuCommand *cmd = new (NonPagedPoolNx) VioGpuCommand(m_pAdapter);
+            if (!cmd)
+            {
+                return STATUS_INSUFFICIENT_RESOURCES;
+            }
+
+            if (pPresent->pDmaBufferPrivateData &&
+                pPresent->DmaBufferPrivateDataSize >= sizeof(VioGpuCommand *))
+            {
+                VioGpuCommand **privateData = (VioGpuCommand **)pPresent->pDmaBufferPrivateData;
+                *privateData = cmd;
+                cmd->SetPrivateDataSlot(privateData);
+            }
+            else
+            {
+                delete cmd;
+                return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+            }
+
+            cmd->SetDmaBuf((char *)pPresent->pDmaBuffer);
+
+            VIOGPU_COMMAND_HDR *cmd_hdr = (VIOGPU_COMMAND_HDR *)pPresent->pDmaBuffer;
+            cmd_hdr->type = VIOGPU_CMD_PRESENT_FLIP;
+            cmd_hdr->size = sizeof(VIOGPU_PRESENT_FLIP_CMD);
+
+            VIOGPU_PRESENT_FLIP_CMD *flipCmd = (VIOGPU_PRESENT_FLIP_CMD *)(cmd_hdr + 1);
+            flipCmd->scan_id = 0;
+            flipCmd->res_id = src->GetId();
+            flipCmd->width = src->GetWidth();
+            flipCmd->height = src->GetHeight();
+            flipCmd->x = 0;
+            flipCmd->y = 0;
+
+            pPresent->pDmaBuffer = (char *)pPresent->pDmaBuffer + flipCommandSize;
+        }
         return STATUS_SUCCESS;
     }
 
@@ -196,13 +257,10 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
         cmd->SetDmaBuf((char *)pPresent->pDmaBuffer);
     }
 
-    DXGK_ALLOCATIONLIST *dxgk_src = &pPresent->pAllocationList[DXGK_PRESENT_SOURCE_INDEX];
-    DXGK_ALLOCATIONLIST *dxgk_dst = &pPresent->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX];
-
     VioGpuAllocation *src = NULL;
     VioGpuAllocation *dst = NULL;
 
-    if (dxgk_src->hDeviceSpecificAllocation != NULL)
+    if (dxgk_src && dxgk_src->hDeviceSpecificAllocation != NULL)
     {
         src = reinterpret_cast<VioGpuDeviceAllocation *>(dxgk_src->hDeviceSpecificAllocation)->GetAllocation();
         if (pPresent->pDmaBuffer)

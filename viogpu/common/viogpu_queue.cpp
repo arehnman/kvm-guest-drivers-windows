@@ -712,7 +712,13 @@ void CtrlQueue::DestroyCtx(UINT ctx_id)
 
 PAGED_CODE_SEG_END
 
-void CtrlQueue::ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y)
+UINT CtrlQueue::ResFlush(UINT res_id,
+                         UINT width,
+                         UINT height,
+                         UINT x,
+                         UINT y,
+                         void (*complete_cb)(void *),
+                         void *complete_ctx)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("---> %s\n", __FUNCTION__));
     PGPU_RES_FLUSH cmd;
@@ -727,6 +733,9 @@ void CtrlQueue::ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y)
     cmd->r.x = x;
     cmd->r.y = y;
 
+    vbuf->complete_cb = complete_cb;
+    vbuf->complete_ctx = complete_ctx;
+
     UINT ret = QueueBufferFenced(vbuf);
     if (ret)
     {
@@ -740,9 +749,11 @@ void CtrlQueue::ResFlush(UINT res_id, UINT width, UINT height, UINT x, UINT y)
                   y,
                   ret));
         ReleaseBuffer(vbuf);
+        return ret;
     }
 
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
+    return ret;
 }
 
 PAGED_CODE_SEG_BEGIN
