@@ -85,6 +85,7 @@ VioGpuAllocation::VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_CREATE_ALLOCAT
     m_adapter = adapter;
     m_Id = m_adapter->resourceIdr.GetId();
     memcpy(&m_options, &exchange->ResourceOptions, sizeof(VIOGPU_RESOURCE_OPTIONS));
+    m_options.bind = VIRGL_BIND_FOR_TARGET(m_options.target, m_options.bind);
     m_is_blob = exchange->BlobMem != 0;
     m_valid = true;
     m_blob_size = ALIGN_UP_BY(exchange->Size, PAGE_SIZE);
@@ -105,7 +106,7 @@ VioGpuAllocation::VioGpuAllocation(VioGpuAdapter *adapter, VIOGPU_CREATE_ALLOCAT
 
     if (!m_is_blob)
     {
-        m_adapter->ctrlQueue.CreateResource3D(m_Id, &exchange->ResourceOptions);
+        m_adapter->ctrlQueue.CreateResource3D(m_Id, &m_options);
         m_resource_created = 1;
     }
 
