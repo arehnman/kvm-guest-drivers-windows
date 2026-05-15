@@ -31,6 +31,44 @@ VioGpuCommand::VioGpuCommand(VioGpuAdapter *adapter)
     m_allocationsLength = 0;
 };
 
+static BOOLEAN IsExpectedEmptySubmit(const DXGKARG_SUBMITCOMMAND *pSubmitCommand)
+{
+    if (pSubmitCommand->DmaBufferSubmissionEndOffset <
+        pSubmitCommand->DmaBufferSubmissionStartOffset)
+    {
+        return FALSE;
+    }
+
+    const BOOLEAN emptyDmaRange =
+        pSubmitCommand->DmaBufferSubmissionEndOffset ==
+        pSubmitCommand->DmaBufferSubmissionStartOffset;
+
+    if (!emptyDmaRange)
+    {
+        return FALSE;
+    }
+
+    if (pSubmitCommand->Flags.Flip || pSubmitCommand->Flags.FlipWithNoWait)
+    {
+        return TRUE;
+    }
+
+    if (pSubmitCommand->Flags.Paging ||
+        pSubmitCommand->Flags.NullRendering)
+    {
+        return TRUE;
+    }
+
+#if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WIN8)
+    if (pSubmitCommand->Flags.ContextSwitch)
+    {
+        return TRUE;
+    }
+#endif
+
+    return FALSE;
+}
+
 void VioGpuCommand::PrepareSubmit(const DXGKARG_SUBMITCOMMAND *pSubmitCommand)
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s", __FUNCTION__));
@@ -48,9 +86,7 @@ void VioGpuCommand::PrepareSubmit(const DXGKARG_SUBMITCOMMAND *pSubmitCommand)
 #endif
     m_submitFlagsValue = pSubmitCommand->Flags.Value;
     m_submitPaging = pSubmitCommand->Flags.Paging ? TRUE : FALSE;
-    m_expectedEmptySubmit = (pSubmitCommand->Flags.Paging != 0) &&
-                            (pSubmitCommand->DmaBufferSubmissionEndOffset <=
-                             pSubmitCommand->DmaBufferSubmissionStartOffset);
+    m_expectedEmptySubmit = IsExpectedEmptySubmit(pSubmitCommand);
     if (m_pDmaBuffer)
     {
         m_pCommand = (char *)m_pDmaBuffer + pSubmitCommand->DmaBufferSubmissionStartOffset;
@@ -89,7 +125,7 @@ void VioGpuCommand::Run()
         if (m_expectedEmptySubmit)
         {
             DbgPrint(TRACE_LEVEL_VERBOSE,
-                     ("%s cmd=%p empty paging dma submit (fence-only) fence=%u node=%u engine=%u submit_flags=0x%x paging=%u hContext=%p ctx_id=%u owner_pid=%p cmd_ptr=%p end_ptr=%p\n",
+                     ("%s cmd=%p empty dma submit (fence-only) fence=%u node=%u engine=%u submit_flags=0x%x paging=%u hContext=%p ctx_id=%u owner_pid=%p cmd_ptr=%p end_ptr=%p\n",
                       __FUNCTION__,
                       this,
                       m_FenceId,
@@ -497,14 +533,32 @@ NTSTATUS VioGpuCommander::SubmitCommand(const DXGKARG_SUBMITCOMMAND *pSubmitComm
         }
         else
         {
-            DbgPrint(TRACE_LEVEL_WARNING,
-                     ("%s private slot already empty fence_id=%u node=%u engine=%u hContext=%p priv_slot=%p\n",
-                      __FUNCTION__,
-                      pSubmitCommand->SubmissionFenceId,
-                      nodeOrdinal,
-                      pSubmitCommand->EngineOrdinal,
-                      pSubmitCommand->hContext,
-                      privSlot));
+            if (IsExpectedEmptySubmit(pSubmitCommand))
+            {
+                DbgPrint(TRACE_LEVEL_VERBOSE,
+                         ("%s private slot empty for fence-only submit fence_id=%u node=%u engine=%u flags=0x%x hContext=%p priv_slot=%p\n",
+                          __FUNCTION__,
+                          pSubmitCommand->SubmissionFenceId,
+                          nodeOrdinal,
+                          pSubmitCommand->EngineOrdinal,
+                          pSubmitCommand->Flags.Value,
+                          pSubmitCommand->hContext,
+                          privSlot));
+            }
+            else
+            {
+                DbgPrint(TRACE_LEVEL_WARNING,
+                         ("%s private slot already empty fence_id=%u node=%u engine=%u flags=0x%x hContext=%p start=0x%x end=0x%x priv_slot=%p\n",
+                          __FUNCTION__,
+                          pSubmitCommand->SubmissionFenceId,
+                          nodeOrdinal,
+                          pSubmitCommand->EngineOrdinal,
+                          pSubmitCommand->Flags.Value,
+                          pSubmitCommand->hContext,
+                          pSubmitCommand->DmaBufferSubmissionStartOffset,
+                          pSubmitCommand->DmaBufferSubmissionEndOffset,
+                          privSlot));
+            }
         }
     }
 
