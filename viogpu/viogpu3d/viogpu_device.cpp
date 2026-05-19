@@ -371,6 +371,11 @@ NTSTATUS VioGpuDevice::Render(DXGKARG_RENDER *pRender)
     }
 
     VioGpuCommand *cmd = new (NonPagedPoolNx) VioGpuCommand(m_pAdapter);
+    if (!cmd)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
     if (pRender->pDmaBufferPrivateData)
     {
         VioGpuCommand **privateData = (VioGpuCommand **)pRender->pDmaBufferPrivateData;

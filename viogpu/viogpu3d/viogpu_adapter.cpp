@@ -2312,18 +2312,8 @@ BOOLEAN VioGpuAdapter::InterruptRoutine(_In_ ULONG MessageNumber)
         }
         if (IsVsyncInterruptEnabled())
         {
-            LARGE_INTEGER freq;
-            LARGE_INTEGER now = KeQueryPerformanceCounter(&freq);
-
-            if (m_vsyncNotifyMinInterval.QuadPart == 0)
+            if (InterlockedExchange(&vidpn.m_vsync, 0))
             {
-                m_vsyncNotifyMinInterval.QuadPart = freq.QuadPart / 80;
-            }
-
-            if ((InterlockedExchange(&vidpn.m_vsync, 0)) &&
-                now.QuadPart - m_vsyncNotifyLastQpc.QuadPart > m_vsyncNotifyMinInterval.QuadPart)
-            {
-                m_vsyncNotifyLastQpc = now;
                 PHYSICAL_ADDRESS sourceAddress = {};
                 vidpn.DequeueSourceAddress(&sourceAddress);
                 DXGKARGCB_NOTIFY_INTERRUPT_DATA interrupt = {};
