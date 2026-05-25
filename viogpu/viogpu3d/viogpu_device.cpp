@@ -55,6 +55,13 @@ NTSTATUS VioGpuDevice::Init(VIOGPU_CTX_INIT_REQ *pOptions)
 
 NTSTATUS VioGpuDevice::GenerateBltPresent(DXGKARG_PRESENT *pPresent, VioGpuAllocation *src, VioGpuAllocation *dst)
 {
+    if (!pPresent->pDmaBuffer ||
+        !pPresent->pDstSubRects ||
+        pPresent->SubRectCnt == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
     UCHAR *dmaBuf = (UCHAR *)pPresent->pDmaBuffer;
 
     // Calculate rect covering all SubRectx
@@ -63,8 +70,8 @@ NTSTATUS VioGpuDevice::GenerateBltPresent(DXGKARG_PRESENT *pPresent, VioGpuAlloc
     {
         coverRect.top = min(coverRect.top, pPresent->pDstSubRects[i].top);
         coverRect.left = min(coverRect.left, pPresent->pDstSubRects[i].left);
-        coverRect.right = min(coverRect.right, pPresent->pDstSubRects[i].right);
-        coverRect.bottom = min(coverRect.bottom, pPresent->pDstSubRects[i].bottom);
+        coverRect.right = max(coverRect.right, pPresent->pDstSubRects[i].right);
+        coverRect.bottom = max(coverRect.bottom, pPresent->pDstSubRects[i].bottom);
     }
 
     INT dx = pPresent->SrcRect.left - pPresent->DstRect.left;
@@ -98,6 +105,10 @@ NTSTATUS VioGpuDevice::GenerateBltPresent(DXGKARG_PRESENT *pPresent, VioGpuAlloc
 
     {
         UINT sizeOfOneRect = 4 * (VIRGL_CMD_RESOURCE_COPY_REGION_SIZE + 1);
+        if (pPresent->DmaSize < 0x100 + sizeOfOneRect)
+        {
+            return STATUS_INVALID_USER_BUFFER;
+        }
 
         // TODO: Support MultiPassOffset
         UINT rectCnt = min(pPresent->SubRectCnt, (pPresent->DmaSize - 0x100) / sizeOfOneRect);
@@ -179,7 +190,7 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
             const UINT flipCommandSize = sizeof(VIOGPU_COMMAND_HDR) + sizeof(VIOGPU_PRESENT_FLIP_CMD);
             if (pPresent->DmaSize < flipCommandSize)
             {
-                return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+                return STATUS_INVALID_USER_BUFFER;
             }
 
             if (!dxgk_src || dxgk_src->hDeviceSpecificAllocation == NULL)
@@ -210,7 +221,7 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
             else
             {
                 delete cmd;
-                return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+                return STATUS_INVALID_PARAMETER;
             }
 
             cmd->SetDmaBuf((char *)pPresent->pDmaBuffer);
@@ -245,11 +256,22 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
               pPresent->Flags.Rotate ? "Rotate" : ""));
 
     VioGpuCommand *cmd = new (NonPagedPoolNx) VioGpuCommand(m_pAdapter);
-    if (pPresent->pDmaBufferPrivateData)
+    if (!cmd)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    if (pPresent->pDmaBufferPrivateData &&
+        pPresent->DmaBufferPrivateDataSize >= sizeof(VioGpuCommand *))
     {
         VioGpuCommand **privateData = (VioGpuCommand **)pPresent->pDmaBufferPrivateData;
         *privateData = cmd;
         cmd->SetPrivateDataSlot(privateData);
+    }
+    else
+    {
+        delete cmd;
+        return STATUS_INVALID_PARAMETER;
     }
 
     if (pPresent->pDmaBuffer)
@@ -265,7 +287,7 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
         src = reinterpret_cast<VioGpuDeviceAllocation *>(dxgk_src->hDeviceSpecificAllocation)->GetAllocation();
         if (pPresent->pDmaBuffer)
         {
-            pPresent->pPatchLocationListOut->AllocationIndex = DXGK_PRESENT_DESTINATION_INDEX;
+            pPresent->pPatchLocationListOut->AllocationIndex = DXGK_PRESENT_SOURCE_INDEX;
             pPresent->pPatchLocationListOut->AllocationOffset = 0;
             pPresent->pPatchLocationListOut->DriverId = 1;
             pPresent->pPatchLocationListOut->SlotId = 1;
@@ -281,7 +303,7 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
         dst = reinterpret_cast<VioGpuDeviceAllocation *>(dxgk_dst->hDeviceSpecificAllocation)->GetAllocation();
         if (pPresent->pDmaBuffer)
         {
-            pPresent->pPatchLocationListOut->AllocationIndex = DXGK_PRESENT_SOURCE_INDEX;
+            pPresent->pPatchLocationListOut->AllocationIndex = DXGK_PRESENT_DESTINATION_INDEX;
             pPresent->pPatchLocationListOut->AllocationOffset = 0;
             pPresent->pPatchLocationListOut->DriverId = 2;
             pPresent->pPatchLocationListOut->SlotId = 2;
@@ -296,7 +318,7 @@ NTSTATUS VioGpuDevice::Present(_Inout_ DXGKARG_PRESENT *pPresent)
     {
         if (pPresent->pDmaBuffer && dst && src)
         {
-            GenerateBltPresent(pPresent, src, dst);
+            return GenerateBltPresent(pPresent, src, dst);
         }
     }
     else
@@ -323,23 +345,57 @@ NTSTATUS VioGpuDevice::Render(DXGKARG_RENDER *pRender)
 
     char *pDmaBufStart = (char *)pRender->pDmaBuffer;
 
+    if (!pRender->pDmaBufferPrivateData ||
+        pRender->DmaBufferPrivateDataSize < sizeof(VioGpuCommand *))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (pRender->CommandLength && !pRender->pCommand)
+    {
+        return STATUS_INVALID_USER_BUFFER;
+    }
+
+    if (pRender->CommandLength && !pRender->pDmaBuffer)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (pRender->PatchLocationListInSize > pRender->PatchLocationListOutSize)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (pRender->PatchLocationListInSize &&
+        (!pRender->pPatchLocationListIn || !pRender->pPatchLocationListOut))
+    {
+        return STATUS_INVALID_USER_BUFFER;
+    }
+
+    if (pRender->MultipassOffset != 0)
+    {
+        return STATUS_INVALID_USER_BUFFER;
+    }
+
     __try
     {
         pRender->PatchLocationListOutSize = pRender->PatchLocationListInSize;
+        D3DDDI_PATCHLOCATIONLIST *patchLocationListOut = pRender->pPatchLocationListOut;
         for (UINT i = 0; i < pRender->PatchLocationListOutSize; i++)
         {
-            pRender->pPatchLocationListOut->AllocationIndex = pRender->pPatchLocationListIn[i].AllocationIndex;
-            pRender->pPatchLocationListOut->AllocationOffset = 0;
-            pRender->pPatchLocationListOut->PatchOffset = 0;
-            pRender->pPatchLocationListOut->SplitOffset = 0;
-            pRender->pPatchLocationListOut->SlotId = i;
+            patchLocationListOut->AllocationIndex = pRender->pPatchLocationListIn[i].AllocationIndex;
+            patchLocationListOut->AllocationOffset = 0;
+            patchLocationListOut->PatchOffset = 0;
+            patchLocationListOut->SplitOffset = 0;
+            patchLocationListOut->SlotId = i;
 
-            pRender->pPatchLocationListOut++;
+            patchLocationListOut++;
         }
 
         unsigned char *dmaBuf = (unsigned char *)pRender->pDmaBuffer;
         unsigned char *cmdBuf = (unsigned char *)pRender->pCommand;
         unsigned char *endBuf = cmdBuf + pRender->CommandLength;
+        UINT dmaBytesLeft = pRender->DmaSize;
         while (cmdBuf < endBuf)
         {
             if (cmdBuf + sizeof(VIOGPU_COMMAND_HDR) > endBuf)
@@ -347,21 +403,26 @@ NTSTATUS VioGpuDevice::Render(DXGKARG_RENDER *pRender)
                 return STATUS_INVALID_USER_BUFFER;
             }
 
-            memcpy(dmaBuf, cmdBuf, sizeof(VIOGPU_COMMAND_HDR));
-            VIOGPU_COMMAND_HDR *cmdHdr = (VIOGPU_COMMAND_HDR *)dmaBuf;
-            cmdBuf += sizeof(VIOGPU_COMMAND_HDR);
-            dmaBuf += sizeof(VIOGPU_COMMAND_HDR);
+            VIOGPU_COMMAND_HDR cmdHdr;
+            memcpy(&cmdHdr, cmdBuf, sizeof(cmdHdr));
 
-            if (cmdBuf + cmdHdr->size > endBuf)
+            if (cmdHdr.size > (UINT)(endBuf - cmdBuf) - sizeof(VIOGPU_COMMAND_HDR))
             {
                 return STATUS_INVALID_USER_BUFFER;
             }
 
-            // Copy command body
-            memcpy(dmaBuf, cmdBuf, cmdHdr->size);
-            dmaBuf += cmdHdr->size;
-            cmdBuf += cmdHdr->size;
+            UINT commandBytes = sizeof(VIOGPU_COMMAND_HDR) + cmdHdr.size;
+            if (commandBytes > dmaBytesLeft)
+            {
+                return STATUS_INVALID_USER_BUFFER;
+            }
+
+            memcpy(dmaBuf, cmdBuf, commandBytes);
+            dmaBuf += commandBytes;
+            cmdBuf += commandBytes;
+            dmaBytesLeft -= commandBytes;
         }
+        pRender->pPatchLocationListOut = patchLocationListOut;
         pRender->pDmaBuffer = dmaBuf;
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
