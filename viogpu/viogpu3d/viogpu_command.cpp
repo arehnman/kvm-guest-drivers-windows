@@ -114,6 +114,80 @@ void VioGpuCommand::PrepareSubmit(const DXGKARG_SUBMITCOMMAND *pSubmitCommand)
               pSubmitCommand->pDmaBufferPrivateData));
 }
 
+static UINT CountDmaCompletionPackets(char *command, char *end, UINT fenceId, BOOLEAN *valid)
+{
+    UINT packets = 0;
+    char *cursor = command;
+
+    *valid = TRUE;
+
+    while (cursor < end)
+    {
+        if (cursor + sizeof(VIOGPU_COMMAND_HDR) > end)
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s fence_id=%u truncated command header: cmd=%p end=%p\n",
+                      __FUNCTION__,
+                      fenceId,
+                      cursor,
+                      end));
+            *valid = FALSE;
+            return 0;
+        }
+
+        VIOGPU_COMMAND_HDR *cmdHdr = (VIOGPU_COMMAND_HDR *)cursor;
+        cursor += sizeof(VIOGPU_COMMAND_HDR);
+
+        if (cursor + cmdHdr->size > end)
+        {
+            DbgPrint(TRACE_LEVEL_WARNING,
+                     ("%s fence_id=%u invalid command size=%u cmd=%p end=%p\n",
+                      __FUNCTION__,
+                      fenceId,
+                      cmdHdr->size,
+                      cursor,
+                      end));
+            *valid = FALSE;
+            return 0;
+        }
+
+        cursor += cmdHdr->size;
+
+        switch (cmdHdr->type)
+        {
+            case VIOGPU_CMD_NOP:
+            case VIOGPU_CMD_SUBMIT:
+            case VIOGPU_CMD_TRANSFER_TO_HOST:
+            case VIOGPU_CMD_TRANSFER_FROM_HOST:
+                packets++;
+                break;
+
+            case VIOGPU_CMD_PRESENT_FLIP:
+                if (cmdHdr->size < sizeof(VIOGPU_PRESENT_FLIP_CMD))
+                {
+                    DbgPrint(TRACE_LEVEL_WARNING,
+                             ("%s fence_id=%u invalid present flip size=%u\n",
+                              __FUNCTION__,
+                              fenceId,
+                              cmdHdr->size));
+                    *valid = FALSE;
+                    return 0;
+                }
+                packets++;
+                break;
+
+            default:
+                DbgPrint(TRACE_LEVEL_WARNING,
+                         ("%s fence_id=%u unsupported command type=%u size=%u\n",
+                          __FUNCTION__, fenceId, cmdHdr->type, cmdHdr->size));
+                *valid = FALSE;
+                return 0;
+        }
+    }
+
+    return packets;
+}
+
 void VioGpuCommand::Run()
 {
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<---> %s\n", __FUNCTION__));
@@ -161,7 +235,7 @@ void VioGpuCommand::Run()
          * Immediate software completion can overtake older pending fences and
          * trigger VIDEO_SCHEDULER_INTERNAL_ERROR(0x119, Arg1=1).
          */
-        InterlockedIncrement(&m_isrPendingPackets);
+        InterlockedExchange(&m_isrPendingPackets, 1);
         InterlockedIncrement(&m_done);
         UINT ret = m_pAdapter->ctrlQueue.SubmitNop(VioGpuCommand::RunningCbDone, this, TRUE /* fenced */);
         if (ret)
@@ -181,6 +255,39 @@ void VioGpuCommand::Run()
         VioGpuCommand::VioGpuCommandDone();
         return;
     }
+
+    BOOLEAN validCommandBuffer = TRUE;
+    UINT pendingPackets = CountDmaCompletionPackets(m_pCommand, m_pEnd, m_FenceId, &validCommandBuffer);
+    if (!validCommandBuffer)
+    {
+        DbgPrint(TRACE_LEVEL_WARNING,
+                 ("%s cmd=%p fence=%u invalid DMA command stream, completing with fenced NOP\n",
+                  __FUNCTION__,
+                  this,
+                  m_FenceId));
+
+        InterlockedExchange(&m_isrPendingPackets, 1);
+        InterlockedIncrement(&m_done);
+        UINT ret = m_pAdapter->ctrlQueue.SubmitNop(VioGpuCommand::RunningCbDone, this, TRUE /* fenced */);
+        if (ret)
+        {
+            DbgPrint(TRACE_LEVEL_FATAL,
+                     ("%s cmd=%p failed to queue invalid-stream completion fence=%u node=%u engine=%u ret=%u\n",
+                      __FUNCTION__,
+                      this,
+                      m_FenceId,
+                      m_NodeOrdinal,
+                      m_EngineOrdinal,
+                      ret));
+            InterlockedExchange(&m_isrPendingPackets, 0);
+            VioGpuCommand::VioGpuCommandDone();
+        }
+
+        VioGpuCommand::VioGpuCommandDone();
+        return;
+    }
+
+    InterlockedExchange(&m_isrPendingPackets, (LONG)pendingPackets);
 
     while (m_pCommand < m_pEnd)
     {
@@ -208,9 +315,27 @@ void VioGpuCommand::Run()
         switch (cmdHdr->type)
         {
             case VIOGPU_CMD_NOP:
+                {
+                    InterlockedIncrement(&m_done);
+
+                    UINT ret = m_pAdapter->ctrlQueue.SubmitNop(VioGpuCommand::RunningCbDone,
+                                                                this,
+                                                                TRUE /* fenced */);
+                    if (ret)
+                    {
+                        DbgPrint(TRACE_LEVEL_WARNING,
+                                 ("%s fence_id=%u failed nop submit ret=%u\n",
+                                  __FUNCTION__,
+                                  m_FenceId,
+                                  ret));
+                        InterlockedDecrement(&m_isrPendingPackets);
+                        VioGpuCommand::VioGpuCommandDone();
+                    }
+                    break;
+                }
+
             case VIOGPU_CMD_SUBMIT:
                 {
-                    InterlockedIncrement(&m_isrPendingPackets);
                     InterlockedIncrement(&m_done);
 
                     PBYTE submitCmd = NULL;
@@ -244,7 +369,6 @@ void VioGpuCommand::Run()
             case VIOGPU_CMD_TRANSFER_TO_HOST:
             case VIOGPU_CMD_TRANSFER_FROM_HOST:
                 {
-                    InterlockedIncrement(&m_isrPendingPackets);
                     InterlockedIncrement(&m_done);
 
                     VIOGPU_TRANSFER_CMD *transferCmd = (VIOGPU_TRANSFER_CMD *)cmdBody;
@@ -271,7 +395,6 @@ void VioGpuCommand::Run()
 
                     VIOGPU_PRESENT_FLIP_CMD *flipCmd = (VIOGPU_PRESENT_FLIP_CMD *)cmdBody;
 
-                    InterlockedIncrement(&m_isrPendingPackets);
                     InterlockedIncrement(&m_done);
 
                     m_pAdapter->ctrlQueue.SetScanout(flipCmd->scan_id,
